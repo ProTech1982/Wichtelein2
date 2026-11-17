@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.wichtelein2.core.ActionType
@@ -152,6 +153,37 @@ class UiTest {
         shot("ui_editor_door")
         val after = awaitPlan("zurück") { Math.abs(it.door.rot) < 0.01f && Math.abs(it.door.y - before.y) < 1.5f && Math.abs(it.door.x - before.x) < 1.5f }.door
         assertTrue("Breite geändert", after.w > before.w * 1.05f)
+    }
+
+    @Test
+    fun draggingInThePhotoMovesAndResizesTheDoor() {
+        openEditor()
+        val before = awaitPlan("Startplan") { true }.door
+        val node = rule.onNodeWithTag("editor_canvas")
+        val wpx = node.fetchSemanticsNode().size.width.toFloat()
+        val k = wpx / 800f
+        // Tür an der Mitte anfassen und nach links ziehen
+        val grab = androidx.compose.ui.geometry.Offset(before.x * k, (before.y - before.h / 2f) * k)
+        node.performTouchInput {
+            down(grab)
+            moveTo(grab + androidx.compose.ui.geometry.Offset(-20f, 0f))
+            moveTo(grab + androidx.compose.ui.geometry.Offset(-60f, 6f))
+            moveTo(grab + androidx.compose.ui.geometry.Offset(-100f, 10f))
+            up()
+        }
+        val moved = awaitPlan("verschoben") { it.door.x < before.x - 40f }.door
+        assertEquals((before.x - 100f / k), moved.x, 12f)
+        assertEquals((before.y + 10f / k), moved.y, 12f)
+        // Griff oben rechts ziehen = größer
+        val handle = androidx.compose.ui.geometry.Offset((moved.x + moved.w / 2f) * k, (moved.y - moved.h) * k)
+        node.performTouchInput {
+            down(handle)
+            moveTo(handle + androidx.compose.ui.geometry.Offset(30f, -30f))
+            moveTo(handle + androidx.compose.ui.geometry.Offset(60f, -60f))
+            up()
+        }
+        val big = awaitPlan("größer gezogen") { it.door.h > moved.h + 20f }.door
+        assertTrue("Breite wächst mit", big.w > moved.w + 10f)
     }
 
     @Test

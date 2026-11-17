@@ -90,11 +90,13 @@ fun EditorCanvas(
                 .pointerInput(plan.width, plan.height) {
                     var mode = DragMode.None
                     var target: Sel = Sel.None
+                    var working: Plan = planState.value   // Zwischenstand, damit schnelle Ziehbewegungen nichts verlieren
                     detectDragGestures(
                         onDragStart = { off ->
                             val k = size.width / planState.value.width.toFloat()
                             val p = Pt(off.x / k, off.y / k)
                             val tol = 28f * density / k
+                            working = planState.value
                             val h = EditOps.handle(planState.value, selState.value)
                             if (h != null && h.dist(p) <= tol * 1.3f) {
                                 mode = DragMode.Resize
@@ -117,11 +119,13 @@ fun EditorCanvas(
                             when (mode) {
                                 DragMode.Move -> {
                                     change.consume()
-                                    onPlanC.value(EditOps.move(planState.value, target, drag.x / k, drag.y / k))
+                                    working = EditOps.move(working, target, drag.x / k, drag.y / k)
+                                    onPlanC.value(working)
                                 }
                                 DragMode.Resize -> {
                                     change.consume()
-                                    onPlanC.value(EditOps.dragHandle(planState.value, target, Pt(change.position.x / k, change.position.y / k)))
+                                    working = EditOps.dragHandle(working, target, Pt(change.position.x / k, change.position.y / k))
+                                    onPlanC.value(working)
                                 }
                                 DragMode.None -> Unit
                             }
