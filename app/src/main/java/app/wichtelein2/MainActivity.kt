@@ -199,7 +199,7 @@ private fun App() {
                     val name = "Wichtelein2_" + System.currentTimeMillis() / 1000 + ".mp4"
                     val out = File(ctx.filesDir, "exports/$name")
                     // Ton (Geräusche und Musik) laut Einstellungen in die Tonspur mischen
-                    val pcm = Mixdown.mix(s, settings.soundFx, MusicChoice.track(settings.music), settings.fxVolume, settings.musicVolume)
+                    val pcm = Mixdown.mix(s, settings.soundGroups, MusicChoice.track(settings.music), settings.fxVolume, settings.musicVolume)
                     Exporter.export(
                         p, ph, sprites, interior, s, out, audio = pcm,
                         onProgress = { export = ExportState.Running(it) },

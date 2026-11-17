@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.wichtelein2.core.Anim
 import app.wichtelein2.core.MusicTrack
+import app.wichtelein2.core.SoundGroup
 import app.wichtelein2.core.ViewMode
 import app.wichtelein2.core.WichtelColors
 import app.wichtelein2.data.AppSettings
@@ -105,14 +106,18 @@ fun SettingsScreen(
         Spacer(Modifier.height(20.dp))
 
         Text("Ton (Geräusche und Musik, der Wichtel spricht nicht)", fontWeight = FontWeight.SemiBold)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Switch(
-                checked = settings.soundFx,
-                onCheckedChange = { onChange(settings.copy(soundFx = it)) },
-                modifier = Modifier.testTag("sound_fx"),
-            )
-            Spacer(Modifier.size(10.dp))
-            Text("Geräusche (Schritte, Tür, Besen, Glöckchen)")
+        SoundGroup.entries.forEach { g ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(
+                    checked = g in settings.soundGroups,
+                    onCheckedChange = { on ->
+                        onChange(settings.copy(soundGroups = if (on) settings.soundGroups + g else settings.soundGroups - g))
+                    },
+                    modifier = Modifier.testTag("sound_${g.name}"),
+                )
+                Spacer(Modifier.size(10.dp))
+                Text(g.label, fontSize = 14.sp)
+            }
         }
         Text("Lautstärke Geräusche", fontSize = 12.sp)
         Slider(

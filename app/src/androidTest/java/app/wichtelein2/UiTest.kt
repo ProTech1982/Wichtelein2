@@ -308,11 +308,15 @@ class UiTest {
     fun soundSettingsAreStored() {
         start()
         rule.onNodeWithTag("btn_settings").performClick()
-        assertTrue("Geräusche sind standardmäßig an", SettingsStore(ctx).load().soundFx)
-        tap("sound_fx")
-        rule.waitUntil(5_000) { !SettingsStore(ctx).load().soundFx }
-        tap("sound_fx")
-        rule.waitUntil(5_000) { SettingsStore(ctx).load().soundFx }
+        assertEquals("alle Geräusche standardmäßig an", app.wichtelein2.core.SoundGroup.entries.toSet(), SettingsStore(ctx).load().soundGroups)
+        // jede Gruppe lässt sich einzeln aus- und wieder einschalten
+        for (g in app.wichtelein2.core.SoundGroup.entries) {
+            tap("sound_${g.name}")
+            rule.waitUntil(5_000) { g !in SettingsStore(ctx).load().soundGroups }
+            assertEquals(app.wichtelein2.core.SoundGroup.entries.size - 1, SettingsStore(ctx).load().soundGroups.size)
+            tap("sound_${g.name}")
+            rule.waitUntil(5_000) { g in SettingsStore(ctx).load().soundGroups }
+        }
         tap("music_3")
         rule.waitUntil(5_000) { SettingsStore(ctx).load().music == 3 }
         tap("music_0")

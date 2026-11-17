@@ -5,9 +5,10 @@ Farben, Design, Update. Details siehe README.md.
 
 ## Version 0.2.0 (Zweig v0.2.0-entwicklung)
 - Ton: `core/Sound.kt` (Fx, SoundSynth, MusicSynth, SoundPlan aus den Simulator-Bildern, Mixdown), `audio/AudioPlayer.kt` (Abspielen), `audio/AudioMux.kt`
-  (Tonspur als AAC in das fertige Video), Einstellungen (Geräusche an/aus, Musik 0-4, Lautstärken), Ton-Schalter in der Vorschau. Kein Sprechen.
+  (Tonspur als AAC in das fertige Video), Einstellungen (6 Geräusch-Gruppen einzeln an/aus: Besen, Pfeifen, Glocken, Erschrecken, Tür, Tip-Tap; Musik 0-4; Lautstärken), Ton-Schalter in der Vorschau. Kein Sprechen.
 - AR: `core/ArMath.kt` (Projektion, Blickwinkel, Drehung zum Betrachter, rein rechnerisch getestet), `ar/ArRenderer.kt` (ARCore + GL-Kamerabild),
   `ar/ArDrawer.kt` (Tür als aufrechtes Bild am Anker, Wichtel nach Kamera-Perspektive), `ar/ArScreen.kt`. Nur Live-Ansicht, kein Video.
+- Fix: „Im Haus verstecken“ als Schritt, während der Wichtel schon drin ist, ließ ihn erst herauskommen und gleich wieder hineingehen (wirkte wie Herausgucken mit zuckender Tür). Jetzt bleibt er drin, Tür zu.
 - Neue Tests: `SoundTest`, `ArMathTest` (JVM), `SoundArTest` (Emulator: Tonspur im Video, AR-Zeichnen mit künstlicher Kamera), UiTest (Ton-Einstellungen, AR-Bildschirm).
 - Nicht prüfbar ohne echtes Handy: ARCore-Bodenerkennung und Verankerung, Ton über Lautsprecher.
 

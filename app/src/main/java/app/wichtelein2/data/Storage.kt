@@ -6,7 +6,9 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
 import androidx.exifinterface.media.ExifInterface
+import app.wichtelein2.core.Mixdown
 import app.wichtelein2.core.MusicTrack
+import app.wichtelein2.core.SoundGroup
 import app.wichtelein2.core.Plan
 import app.wichtelein2.core.PlanJson
 import app.wichtelein2.core.WichtelColors
@@ -15,12 +17,12 @@ import kotlin.math.max
 
 /**
  * App-Einstellungen: Design (0 System, 1 hell, 2 dunkel), Wichtelfarben (null = Original) und Ton.
- * Ton: Geräusche an/aus, Musik (0 aus, 1..4 Melodie), Lautstärken. Der Wichtel spricht nie.
+ * Ton: Geräusche je Gruppe an/aus, Musik (0 aus, 1..4 Melodie), Lautstärken. Der Wichtel spricht nie.
  */
 data class AppSettings(
     val themeMode: Int = 0,
     val colors: WichtelColors = WichtelColors(),
-    val soundFx: Boolean = true,
+    val soundGroups: Set<SoundGroup> = SoundGroup.entries.toSet(),
     val music: Int = 1,
     val fxVolume: Float = 0.8f,
     val musicVolume: Float = 0.5f,
@@ -34,7 +36,7 @@ class SettingsStore(context: Context) {
     fun load(): AppSettings = AppSettings(
         themeMode = p.getInt("themeMode", 0).coerceIn(0, 2),
         colors = WichtelColors(color("hat"), color("jacket"), color("pants"), color("shoes")),
-        soundFx = p.getBoolean("soundFx", true),
+        soundGroups = Mixdown.fromMask(p.getInt("soundGroups", Mixdown.toMask(SoundGroup.entries.toSet()))),
         music = p.getInt("music", 1).coerceIn(0, MusicTrack.entries.size),
         fxVolume = p.getFloat("fxVolume", 0.8f).coerceIn(0f, 1f),
         musicVolume = p.getFloat("musicVolume", 0.5f).coerceIn(0f, 1f),
@@ -43,7 +45,7 @@ class SettingsStore(context: Context) {
     fun save(s: AppSettings) {
         val e = p.edit()
         e.putInt("themeMode", s.themeMode)
-        e.putBoolean("soundFx", s.soundFx)
+        e.putInt("soundGroups", Mixdown.toMask(s.soundGroups))
         e.putInt("music", s.music)
         e.putFloat("fxVolume", s.fxVolume)
         e.putFloat("musicVolume", s.musicVolume)

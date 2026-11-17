@@ -66,9 +66,9 @@ fun PreviewScreen(
     // Ton: einmal mischen, dann ab der aktuellen Stelle abspielen (Pause, Springen und Neustart starten ihn neu)
     val audio = remember { AudioPlayer() }
     DisposableEffect(Unit) { onDispose { audio.stop() } }
-    val mix by produceState<FloatArray?>(null, sim, settings.soundFx, settings.music, settings.fxVolume, settings.musicVolume) {
+    val mix by produceState<FloatArray?>(null, sim, settings.soundGroups, settings.music, settings.fxVolume, settings.musicVolume) {
         value = withContext(Dispatchers.Default) {
-            Mixdown.mix(sim, settings.soundFx, MusicChoice.track(settings.music), settings.fxVolume, settings.musicVolume)
+            Mixdown.mix(sim, settings.soundGroups, MusicChoice.track(settings.music), settings.fxVolume, settings.musicVolume)
         }
     }
     var restartCount by remember { mutableIntStateOf(0) }

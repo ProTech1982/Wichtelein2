@@ -346,13 +346,15 @@ class Simulator(private val plan: Plan, private val fps: Int = 30) {
     }
 
     private fun doHide(s: Step) {
-        ensureOutside()
         val o = if (s.retreat == Retreat.OBJECT) chooseHideObject(s) else null
         if (o != null) {
+            ensureOutside()
             hideBehind(o, Anim.SNEAK, 0.45f, 0.30f, 0.7f, 0.6f, s.seconds)
         } else {
             if (s.retreat == Retreat.OBJECT) warnings.add("Kein Gegenstand zum Verstecken, Wichtel geht in die Tür")
-            enterHouse(Anim.SNEAK, 0.45f, 0.30f)
+            // Schon im Haus: einfach drinnen bleiben. Erst herauszukommen und gleich wieder hineinzugehen sähe aus wie ein
+            // kurzes Herausgucken mit zuckender Tür.
+            if (!inside) enterHouse(Anim.SNEAK, 0.45f, 0.30f)
             hold(max(0.5f, s.seconds), Anim.IDLE, 1f)
         }
     }

@@ -11,7 +11,9 @@ class SoundTest {
     private fun sim(steps: List<Step>): Simulation =
         Simulator(Plan.default(1600, 1000).copy(steps = steps)).run()
 
-    private val all = listOf(
+    private val all = SoundGroup.entries.toSet()
+
+    private val steps3 = listOf(
         Step(ActionType.SWEEP, seconds = 3f),
         Step(ActionType.HIDE, retreat = Retreat.DOOR, seconds = 1f),
         Step(ActionType.SCARE, retreat = Retreat.DOOR),
@@ -55,9 +57,9 @@ class SoundTest {
 
     @Test
     fun planHasDoorStepsSweepsScareAndTinkle() {
-        val ev = SoundPlan.events(sim(all))
+        val ev = SoundPlan.events(sim(steps3))
         val kinds = ev.map { it.fx }.toSet()
-        for (fx in listOf(Fx.DOOR_OPEN, Fx.DOOR_CLOSE, Fx.STEP, Fx.SWEEP, Fx.STARTLE, Fx.TINKLE)) assertTrue("$fx fehlt", fx in kinds)
+        for (fx in listOf(Fx.DOOR_OPEN, Fx.DOOR_CLOSE, Fx.STEP, Fx.SWEEP, Fx.HUCH, Fx.TINKLE)) assertTrue("$fx fehlt", fx in kinds)
         assertEquals(ev.count { it.fx == Fx.DOOR_OPEN }, ev.count { it.fx == Fx.DOOR_CLOSE })
     }
 
@@ -74,7 +76,7 @@ class SoundTest {
 
     @Test
     fun eventsAreInsideTheVideo() {
-        val s = sim(all)
+        val s = sim(steps3)
         val ev = SoundPlan.events(s)
         assertTrue(ev.isNotEmpty())
         for (e in ev) assertTrue(e.timeMs in 0..(s.duration * 1000).toLong())
@@ -90,8 +92,8 @@ class SoundTest {
 
     @Test
     fun mixdownCombinesAndLimits() {
-        val s = sim(all)
-        val m = Mixdown.mix(s, fxOn = true, music = MusicTrack.SNOWFLAKE, fxVolume = 1f, musicVolume = 1f)
+        val s = sim(steps3)
+        val m = Mixdown.mix(s, all, music = MusicTrack.SNOWFLAKE, fxVolume = 1f, musicVolume = 1f)
         assertNotNull(m)
         assertEquals((s.duration + Mixdown.TAIL_SEC) * SoundSynth.RATE, m!!.size.toFloat(), 2f)
         assertTrue(m.maxOf { abs(it) } <= 0.951f)
@@ -102,10 +104,10 @@ class SoundTest {
 
     @Test
     fun mixdownPartsAreIndependent() {
-        val s = sim(all)
-        assertNull(Mixdown.mix(s, fxOn = false, music = null))
-        val onlyFx = Mixdown.mix(s, true, null)!!
-        val onlyMusic = Mixdown.mix(s, false, MusicTrack.TANNE)!!
+        val s = sim(steps3)
+        assertNull(Mixdown.mix(s, emptySet(), music = null))
+        val onlyFx = Mixdown.mix(s, all, null)!!
+        val onlyMusic = Mixdown.mix(s, emptySet(), MusicTrack.TANNE)!!
         assertTrue(onlyFx.maxOf { abs(it) } > 0.05f)
         assertTrue(onlyMusic.maxOf { abs(it) } > 0.05f)
         // Geräusche allein: der Anfang ist still (die Tür öffnet erst nach 0,6 s)
@@ -114,9 +116,9 @@ class SoundTest {
 
     @Test
     fun volumeScalesFx() {
-        val s = sim(all)
-        val loud = Mixdown.mix(s, true, null, fxVolume = 0.8f)!!.maxOf { abs(it) }
-        val soft = Mixdown.mix(s, true, null, fxVolume = 0.2f)!!.maxOf { abs(it) }
+        val s = sim(steps3)
+        val loud = Mixdown.mix(s, all, null, fxVolume = 0.8f)!!.maxOf { abs(it) }
+        val soft = Mixdown.mix(s, all, null, fxVolume = 0.2f)!!.maxOf { abs(it) }
         assertTrue(soft < loud * 0.5f)
     }
 }

@@ -117,11 +117,39 @@ class SimulatorTest {
 
     @Test
     fun hideInDoorStaysInsideForWhile() {
-        val p = base(steps = listOf(Step(ActionType.HIDE, retreat = Retreat.DOOR, seconds = 2f)))
+        val p = base(steps = listOf(Step(ActionType.SWEEP, seconds = 2f), Step(ActionType.HIDE, retreat = Retreat.DOOR, seconds = 2f)))
         val s = Simulator(p).run()
         assertTrue(s.frames.any { it.anim == Anim.SNEAK })
-        val insideFrames = s.frames.count { it.houseT > 0.99f && it.step == 0 }
+        val insideFrames = s.frames.count { it.houseT > 0.99f && it.step == 1 }
         assertTrue(insideFrames >= 2 * 30)
+    }
+
+    @Test
+    fun hidingWhileAlreadyInsideDoesNotPeekOut() {
+        // Erster Schritt „im Haus verstecken“: der Wichtel war schon drin, also bleibt er unsichtbar und die Tür zu
+        val p = base(steps = listOf(Step(ActionType.HIDE, retreat = Retreat.DOOR, seconds = 2f)))
+        val s = Simulator(p).run()
+        for (f in s.frames) {
+            assertEquals("Wichtel guckt heraus bei t=${f.t}", 1f, f.houseT, 0.001f)
+            assertEquals("Tür zuckt bei t=${f.t}", 0f, f.doorOpen, 0.01f)
+        }
+        assertTrue(s.duration >= 2f)
+    }
+
+    @Test
+    fun hidingAfterSweepEntersOnceAndStaysGone() {
+        val p = base(steps = listOf(Step(ActionType.SWEEP, seconds = 2f), Step(ActionType.HIDE, retreat = Retreat.DOOR, seconds = 2f)))
+        val s = Simulator(p).run()
+        val enterEnd = s.frames.indexOfFirst { it.step == 1 && it.houseT > 0.99f }
+        assertTrue(enterEnd > 0)
+        // ab dem Hineingehen nie wieder sichtbar, solange der Schritt läuft; die Tür geht nur noch zu
+        var lastOpen = 2f
+        for (i in enterEnd until s.frames.size) {
+            val f = s.frames[i]
+            assertTrue("Wichtel taucht wieder auf bei t=${f.t}", f.houseT >= 0.99f)
+            assertTrue("Tür öffnet sich erneut bei t=${f.t}", f.doorOpen <= lastOpen + 0.001f)
+            lastOpen = f.doorOpen
+        }
     }
 
     @Test

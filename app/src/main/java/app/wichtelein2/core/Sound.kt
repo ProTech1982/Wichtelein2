@@ -12,17 +12,44 @@ import kotlin.random.Random
  * Ton des Wichtels: nur Geräusche und Musik, keine Sprache. Alles wird selbst erzeugt (keine fremden Klangdateien).
  * Dieser Teil kennt kein Android, damit er sich auf dem PC testen lässt.
  */
-enum class Fx(val label: String) {
+/** Gruppen von Geräuschen, die man in den Einstellungen einzeln an- und ausschalten kann. */
+enum class SoundGroup(val label: String) {
+    BROOM("Besen beim Fegen"),
+    WHISTLE("Pfeifen beim Fegen (Weihnachtslieder)"),
+    BELLS("Glocken beim Fegen (Weihnachtsmelodie)"),
+    STARTLE("Erschrecken („Huch“, „Ohh“)"),
+    DOOR("Tür auf und zu (Knarren, Knacken)"),
+    STEPS("Tip-Tap beim Laufen, Glöckchen, Rascheln"),
+}
+
+enum class Fx(val label: String, val group: SoundGroup) {
     /** Mützenglöckchen beim Laufen */
-    TINKLE("Glöckchen"),
-    DOOR_OPEN("Tür auf"),
-    DOOR_CLOSE("Tür zu"),
-    STEP("Schritt"),
-    SWEEP("Fegen"),
-    /** Erschrecken: kurzes, steigendes Quieken ohne Wörter */
-    STARTLE("Erschrecken"),
+    TINKLE("Glöckchen", SoundGroup.STEPS),
+    DOOR_OPEN("Tür auf", SoundGroup.DOOR),
+    DOOR_CLOSE("Tür zu", SoundGroup.DOOR),
+    /** kleiner Schritt: Tip-Tap */
+    STEP("Tip-Tap", SoundGroup.STEPS),
+    SWEEP("Besen", SoundGroup.BROOM),
+    /** Erschrecken ohne Wörter: kurzes „Huch“ und langgezogenes „Ohh“ */
+    HUCH("Huch", SoundGroup.STARTLE),
+    OHH("Ohh", SoundGroup.STARTLE),
     /** Ducken: Stoff raschelt */
-    RUSTLE("Rascheln"),
+    RUSTLE("Rascheln", SoundGroup.STEPS),
+    WHISTLE_1("Pfeifen 1", SoundGroup.WHISTLE),
+    WHISTLE_2("Pfeifen 2", SoundGroup.WHISTLE),
+    WHISTLE_3("Pfeifen 3", SoundGroup.WHISTLE),
+    BELLS_1("Glocken 1", SoundGroup.BELLS),
+    BELLS_2("Glocken 2", SoundGroup.BELLS),
+    BELLS_3("Glocken 3", SoundGroup.BELLS),
+}
+
+/** Kurze Melodie-Anfänge (Ton:Länge in Schlägen) zum Pfeifen und für die Glocken beim Fegen. */
+object Phrases {
+    val list: List<Pair<String, Float>> = listOf(
+        "D5:.5 G5:.75 G5:.25 G5:1 A5:.5 B5:.75 B5:.25 B5:1 A5:.5 B5:.5 C6:.5 D6:1.5" to 0.28f,          // O Tannenbaum
+        "E5:.5 E5:.5 E5:1 E5:.5 E5:.5 E5:1 E5:.5 G5:.5 C5:.75 D5:.25 E5:2" to 0.24f,                     // Jingle Bells
+        "G5:.75 A5:.25 G5:.5 E5:1.5 G5:.75 A5:.25 G5:.5 E5:1.5 D6:1 D6:.5 B5:1.5" to 0.3f,               // Stille Nacht
+    ).map { it }
 }
 
 class SoundEvent(val timeMs: Long, val fx: Fx, val gain: Float = 1f)
@@ -95,6 +122,58 @@ object SoundSynth {
         }
     }
 
+    /** Selbstlaut mit Formanten: Stimmton (Obertöne) durch zwei Resonanzen geformt; f0 gleitet von f0a nach f0b. */
+    private fun vowel(out: FloatArray, startSec: Float, durSec: Float, f0a: Float, f0b: Float, f1: Float, f2: Float, amp: Float) {
+        val s0 = n(startSec)
+        val len = min(out.size - s0, n(durSec))
+        val phases = DoubleArray(24)
+        for (i in 0 until len) {
+            val u = i.toFloat() / len
+            val t = i.toFloat() / RATE
+            val f0 = (f0a + (f0b - f0a) * u) * (1f + 0.012f * sin(2.0 * PI * 5.5 * t).toFloat())
+            var v = 0f
+            for (h in 1..23) {
+                val fh = f0 * h
+                if (fh > 5000f) break
+                phases[h] += 2.0 * PI * fh / RATE
+                val g = exp(-((fh - f1) / 160f).pow(2)) + 0.6f * exp(-((fh - f2) / 220f).pow(2)) + 0.04f
+                v += g / h * sin(phases[h]).toFloat()
+            }
+            val env = min(1f, u * 12f) * min(1f, (1f - u) * 6f)
+            out[s0 + i] += amp * env * v
+        }
+    }
+
+    /** Pfeifton: fast reiner Sinus mit leichtem Vibrato und etwas Luft. */
+    private fun whistleNote(out: FloatArray, startSec: Float, durSec: Float, f: Float, amp: Float, rng: Random) {
+        val s0 = n(startSec)
+        val len = min(out.size - s0, n(durSec))
+        var ph = 0.0
+        for (i in 0 until len) {
+            val t = i.toFloat() / RATE
+            val fr = f * (1f + 0.006f * sin(2.0 * PI * 5.5 * t).toFloat())
+            ph += 2.0 * PI * fr / RATE
+            val attack = min(1f, t / 0.03f)
+            val release = min(1f, (len - i).toFloat() / (RATE * 0.05f))
+            out[s0 + i] += amp * attack * release * (sin(ph).toFloat() + 0.04f * (rng.nextFloat() - 0.5f))
+        }
+    }
+
+    /** Eine kurze Weihnachtsmelodie, gepfiffen oder als Glöckchen (Glockenspiel). */
+    private fun phrase(index: Int, whistle: Boolean, rng: Random): FloatArray {
+        val (text, beat) = Phrases.list[index]
+        val notes = text.split(' ').map { val (nm, l) = it.split(':'); nm to l.toFloat() }
+        val total = notes.sumOf { it.second.toDouble() }.toFloat() * beat + 0.9f
+        val out = FloatArray(n(total))
+        var t = 0f
+        for ((name, len) in notes) {
+            val f = MusicSynth.hz(name)
+            if (whistle) whistleNote(out, t, len * beat * 0.92f, f, 0.45f, rng) else bell(out, t, f, 0.4f, 5f)
+            t += len * beat
+        }
+        return out
+    }
+
     private fun render(fx: Fx): FloatArray {
         val rng = Random(fx.ordinal * 7919 + 13)
         return when (fx) {
@@ -116,37 +195,42 @@ object SoundSynth {
                 }
                 noise(o, 0f, 0.95f, 0.05f, 0.9f, rng) { sin(it * PI).toFloat() }
                 thump(o, 0f, 95f, 0.2f, 14f)
+                // Knacken im Holz
+                for (k in 0 until 6) noise(o, 0.08f + k * 0.15f + rng.nextFloat() * 0.07f, 0.008f, 0.55f, 0.1f, rng) { exp(-4f * it) }
             }
             Fx.DOOR_CLOSE -> FloatArray(n(0.7f)).also { o ->
                 thump(o, 0f, 70f, 0.8f, 11f)
                 thump(o, 0f, 140f, 0.35f, 18f)
                 noise(o, 0f, 0.08f, 0.5f, 0.55f, rng) { exp(-6f * it) }
                 bell(o, 0.02f, 2500f, 0.05f, 14f)
+                noise(o, 0.1f, 0.01f, 0.45f, 0.1f, rng) { exp(-4f * it) }   // Knacks
+                noise(o, 0.17f, 0.008f, 0.35f, 0.1f, rng) { exp(-4f * it) }
             }
-            Fx.STEP -> FloatArray(n(0.12f)).also { o ->
-                thump(o, 0f, 120f, 0.5f, 40f)
-                noise(o, 0f, 0.05f, 0.25f, 0.7f, rng) { exp(-7f * it) }
+            Fx.STEP -> FloatArray(n(0.16f)).also { o ->
+                // Tip-Tap: zwei kleine, helle Klopfer
+                thump(o, 0f, 520f, 0.45f, 90f)
+                noise(o, 0f, 0.012f, 0.3f, 0.2f, rng) { exp(-5f * it) }
+                thump(o, 0.07f, 430f, 0.32f, 100f)
+                noise(o, 0.07f, 0.01f, 0.2f, 0.2f, rng) { exp(-5f * it) }
             }
             Fx.SWEEP -> FloatArray(n(0.5f)).also { o ->
                 noise(o, 0f, 0.45f, 0.5f, 0.72f, rng) { u -> sin(u * PI).toFloat().pow(1.4f) }
             }
-            Fx.STARTLE -> FloatArray(n(0.5f)).also { o ->
-                // steigender Ton mit Zittern, danach ein kleiner Glockenton (Schreck, keine Sprache)
-                var ph = 0.0
-                val len = n(0.24f)
-                for (i in 0 until len) {
-                    val u = i.toFloat() / len
-                    val f = 520f + 980f * u * u + 30f * sin(u * 60f)
-                    ph += 2.0 * PI * f / RATE
-                    val env = min(1f, u * 18f) * (1f - u).pow(0.6f)
-                    o[i] += 0.5f * env * (sin(ph).toFloat() + 0.3f * sin(2 * ph).toFloat())
-                }
-                noise(o, 0f, 0.05f, 0.18f, 0.5f, rng) { exp(-6f * it) }
-                bell(o, 0.22f, 2093f, 0.14f, 9f)
+            Fx.HUCH -> FloatArray(n(0.5f)).also { o ->
+                // „H“ (Hauch), „u“ steigend, „ch“ (Zischen): ein Huch ohne echte Sprache
+                noise(o, 0f, 0.06f, 0.25f, 0.4f, rng) { sin(it * PI).toFloat() }
+                vowel(o, 0.05f, 0.17f, 330f, 560f, 320f, 800f, 0.5f)
+                noise(o, 0.2f, 0.14f, 0.22f, 0.15f, rng) { u -> sin(u * PI).toFloat() * (1f - u * 0.5f) }
+            }
+            Fx.OHH -> FloatArray(n(0.9f)).also { o ->
+                // „Ohhh“: langgezogenes o, Tonhöhe fällt, Zittern am Ende
+                vowel(o, 0.02f, 0.8f, 470f, 330f, 500f, 900f, 0.55f)
             }
             Fx.RUSTLE -> FloatArray(n(0.3f)).also { o ->
                 noise(o, 0f, 0.26f, 0.35f, 0.45f, rng) { u -> sin(u * PI).toFloat() * (0.6f + 0.4f * sin(u * 70f)) }
             }
+            Fx.WHISTLE_1, Fx.WHISTLE_2, Fx.WHISTLE_3 -> phrase(fx.ordinal - Fx.WHISTLE_1.ordinal, whistle = true, rng = rng)
+            Fx.BELLS_1, Fx.BELLS_2, Fx.BELLS_3 -> phrase(fx.ordinal - Fx.BELLS_1.ordinal, whistle = false, rng = rng)
         }
     }
 }
@@ -258,6 +342,12 @@ object SoundPlan {
     fun events(sim: Simulation): List<SoundEvent> {
         val out = ArrayList<SoundEvent>()
         var steps = 0
+        var scares = 0
+        var sweeps = 0
+        var nextWhistle = 0L
+        var nextBells = 0L
+        var whistles = 0
+        var bells = 0
         for (i in 1 until sim.frames.size) {
             val a = sim.frames[i - 1]
             val b = sim.frames[i]
@@ -265,17 +355,40 @@ object SoundPlan {
             if (a.doorOpen < 0.05f && b.doorOpen >= 0.05f) out.add(SoundEvent(ms, Fx.DOOR_OPEN, 0.8f))
             if (a.doorOpen > 0.05f && b.doorOpen <= 0.05f) out.add(SoundEvent(ms, Fx.DOOR_CLOSE, 0.9f))
             if (b.houseT > 0.6f) continue
+            if (b.anim == Anim.SWEEP && a.anim != Anim.SWEEP) {
+                // neues Fegen: Pfeifen beginnt gleich, die Glocken etwas später, damit sie sich abwechseln
+                sweeps++
+                nextWhistle = ms + 300
+                nextBells = ms + 2200
+            }
+            if (b.anim == Anim.SWEEP) {
+                if (ms >= nextWhistle) {
+                    val fx = Fx.entries[Fx.WHISTLE_1.ordinal + whistles % 3]
+                    out.add(SoundEvent(ms, fx, 0.55f))
+                    nextWhistle = ms + (SoundSynth.get(fx).size * 1000L / SoundSynth.RATE) + 2500
+                    whistles++
+                }
+                if (ms >= nextBells) {
+                    val fx = Fx.entries[Fx.BELLS_1.ordinal + bells % 3]
+                    out.add(SoundEvent(ms, fx, 0.5f))
+                    nextBells = ms + (SoundSynth.get(fx).size * 1000L / SoundSynth.RATE) + 3500
+                    bells++
+                }
+            }
             val changed = b.anim != a.anim || b.frame != a.frame
             if (!changed) continue
             when (b.anim) {
                 Anim.WALK, Anim.SNEAK, Anim.RUN -> if (b.frame % 4 == 0) {
-                    val g = when (b.anim) { Anim.SNEAK -> 0.35f; Anim.RUN -> 1f; else -> 0.65f }
+                    val g = when (b.anim) { Anim.SNEAK -> 0.4f; Anim.RUN -> 1f; else -> 0.7f }
                     out.add(SoundEvent(ms, Fx.STEP, g))
                     steps++
-                    if (b.anim != Anim.SNEAK && steps % 3 == 0) out.add(SoundEvent(ms + 20, Fx.TINKLE, 0.6f))
+                    if (b.anim != Anim.SNEAK && steps % 5 == 0) out.add(SoundEvent(ms + 20, Fx.TINKLE, 0.6f))
                 }
                 Anim.SWEEP -> if (b.frame % 4 == 0) out.add(SoundEvent(ms, Fx.SWEEP, 0.7f))
-                Anim.SCARE -> if (a.anim != Anim.SCARE) out.add(SoundEvent(ms, Fx.STARTLE, 0.9f))
+                Anim.SCARE -> if (a.anim != Anim.SCARE) {
+                    out.add(SoundEvent(ms, if (scares % 2 == 0) Fx.HUCH else Fx.OHH, 0.9f))
+                    scares++
+                }
                 Anim.DUCK -> if (a.anim != Anim.DUCK) out.add(SoundEvent(ms, Fx.RUSTLE, 0.7f))
                 else -> Unit
             }
@@ -284,18 +397,18 @@ object SoundPlan {
     }
 }
 
-/** Mischt Geräusche und Musik zum fertigen Ton des Ablaufs (Mono, [SoundSynth.RATE] Hz, Werte -1..1). */
+/** Mischt Geräusche (nur die gewählten Gruppen) und Musik zum fertigen Ton des Ablaufs (Mono, [SoundSynth.RATE] Hz). */
 object Mixdown {
     const val TAIL_SEC = 0.6f
 
     fun mix(
         sim: Simulation,
-        fxOn: Boolean,
+        groups: Set<SoundGroup>,
         music: MusicTrack?,
         fxVolume: Float = 0.8f,
         musicVolume: Float = 0.5f,
     ): FloatArray? {
-        if (!fxOn && music == null) return null
+        if (groups.isEmpty() && music == null) return null
         val acc = FloatArray(((sim.duration + TAIL_SEC) * SoundSynth.RATE).toInt())
         if (music != null) {
             val m = MusicSynth.render(music)
@@ -306,16 +419,15 @@ object Mixdown {
                 acc[i] += m[i % m.size] * musicVolume * f
             }
         }
-        if (fxOn) {
-            for (ev in SoundPlan.events(sim)) {
-                val data = SoundSynth.get(ev.fx)
-                val start = (ev.timeMs * SoundSynth.RATE / 1000L).toInt()
-                val g = ev.gain * fxVolume
-                for (j in data.indices) {
-                    val idx = start + j
-                    if (idx >= acc.size) break
-                    if (idx >= 0) acc[idx] += data[j] * g
-                }
+        for (ev in SoundPlan.events(sim)) {
+            if (ev.fx.group !in groups) continue
+            val data = SoundSynth.get(ev.fx)
+            val start = (ev.timeMs * SoundSynth.RATE / 1000L).toInt()
+            val g = ev.gain * fxVolume
+            for (j in data.indices) {
+                val idx = start + j
+                if (idx >= acc.size) break
+                if (idx >= 0) acc[idx] += data[j] * g
             }
         }
         var peak = 0f
@@ -326,4 +438,8 @@ object Mixdown {
         }
         return acc
     }
+
+    /** Einstellungen speichern als Bitmaske (Bit i = SoundGroup.entries[i]). */
+    fun toMask(groups: Set<SoundGroup>): Int = groups.fold(0) { m, g -> m or (1 shl g.ordinal) }
+    fun fromMask(mask: Int): Set<SoundGroup> = SoundGroup.entries.filter { mask and (1 shl it.ordinal) != 0 }.toSet()
 }

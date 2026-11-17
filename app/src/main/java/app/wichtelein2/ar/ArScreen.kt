@@ -214,12 +214,12 @@ private fun ArContent(activity: Activity, settings: AppSettings, sprites: Sprite
     var startNanos by remember { mutableLongStateOf(0L) }
     var elapsedMs by remember { mutableLongStateOf(-1L) }
     val placement = snapshot?.placement ?: 0
-    LaunchedEffect(sim, placement, muted, settings.soundFx, settings.music, settings.fxVolume, settings.musicVolume) {
+    LaunchedEffect(sim, placement, muted, settings.soundGroups, settings.music, settings.fxVolume, settings.musicVolume) {
         val s = sim ?: return@LaunchedEffect
         audio.stop()
         if (muted || placement == 0) return@LaunchedEffect
         val pcm = withContext(Dispatchers.Default) {
-            Mixdown.mix(s, settings.soundFx, MusicChoice.track(settings.music), settings.fxVolume, settings.musicVolume)
+            Mixdown.mix(s, settings.soundGroups, MusicChoice.track(settings.music), settings.fxVolume, settings.musicVolume)
         } ?: return@LaunchedEffect
         startNanos = withFrameNanos { it }
         audio.play(pcm, 0f, loop = true)

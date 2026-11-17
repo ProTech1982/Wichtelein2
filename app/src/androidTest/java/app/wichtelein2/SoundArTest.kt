@@ -17,6 +17,7 @@ import app.wichtelein2.core.MusicTrack
 import app.wichtelein2.core.Mixdown
 import app.wichtelein2.core.Plan
 import app.wichtelein2.core.Retreat
+import app.wichtelein2.core.SoundGroup
 import app.wichtelein2.core.Simulator
 import app.wichtelein2.core.Step
 import app.wichtelein2.render.Exporter
@@ -37,7 +38,7 @@ class SoundArTest {
     fun exportedVideoHasAnAacTrackOfTheRightLength() {
         val plan = Plan.default(640, 480).copy(steps = listOf(Step(ActionType.SWEEP, seconds = 2f), Step(ActionType.SCARE, retreat = Retreat.DOOR)))
         val sim = Simulator(plan).run()
-        val pcm = Mixdown.mix(sim, true, MusicTrack.SNOWFLAKE)!!
+        val pcm = Mixdown.mix(sim, SoundGroup.entries.toSet(), MusicTrack.SNOWFLAKE)!!
         val out = File(ctx.filesDir, "exports/mit_ton.mp4")
         val r = Exporter.export(plan, TestUtil.photo(640, 480), SpriteLibrary(ctx), null, sim, out, audio = pcm, maxSide = 480)
         assertTrue(out.exists() && out.length() > 20_000)
@@ -99,7 +100,7 @@ class SoundArTest {
     fun audioPlayerStartsSeeksAndStopsWithoutCrashing() {
         val plan = Plan.default(640, 480)
         val sim = Simulator(plan).run()
-        val pcm = Mixdown.mix(sim, true, MusicTrack.TANNE)!!
+        val pcm = Mixdown.mix(sim, SoundGroup.entries.toSet(), MusicTrack.TANNE)!!
         val p = AudioPlayer()
         p.play(pcm, 0f)
         p.play(pcm, 3f, volume = 0.5f)
