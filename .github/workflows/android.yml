@@ -1,0 +1,107 @@
+name: APK bauen
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code holen
+        uses: actions/checkout@v4
+
+      - name: Java 17 einrichten
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Gradle einrichten
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Signaturschlüssel bereitstellen
+        env:
+          KEY_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          # Ohne festen Schlüssel lässt sich kein Update über eine bestehende
+          # Installation legen. Deshalb bricht der Build bei jedem Fehler ab,
+          # statt still eine Debug-APK zu bauen.
+          if [ -z "$KEY_B64" ] || [ -z "$KEY_PASS" ] || [ -z "$KEY_ALIAS" ]; then
+            echo "::error::Signatur-Secrets fehlen (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS)."
+            exit 1
+          fi
+          KS="$RUNNER_TEMP/release.keystore"
+          if ! printf '%s' "$KEY_B64" | tr -d '[:space:]' | base64 --decode > "$KS"; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 ist kein gültiges Base64."
+            exit 1
+          fi
+          if ! keytool -J-Duser.language=en -list -keystore "$KS" -storepass "$KEY_PASS" > "$RUNNER_TEMP/ks.txt" 2>&1; then
+            cat "$RUNNER_TEMP/ks.txt"
+            echo "::error::Keystore nicht lesbar - ANDROID_KEYSTORE_PASSWORD passt nicht."
+            exit 1
+          fi
+          if ! grep -qi "^$KEY_ALIAS,.*PrivateKeyEntry" "$RUNNER_TEMP/ks.txt"; then
+            echo "Gefundene Einträge:"
+            grep -i "PrivateKeyEntry" "$RUNNER_TEMP/ks.txt" | cut -d, -f1 || true
+            echo "::error::ANDROID_KEY_ALIAS passt zu keinem Schlüssel im Keystore."
+            exit 1
+          fi
+          echo "Keystore in Ordnung, Alias: $KEY_ALIAS"
+          {
+            echo "ANDROID_KEYSTORE_FILE=$KS"
+            echo "ANDROID_KEYSTORE_PASSWORD=$KEY_PASS"
+            echo "ANDROID_KEY_ALIAS=$KEY_ALIAS"
+            echo "ANDROID_KEY_PASSWORD=$KEY_PASS"
+          } >> "$GITHUB_ENV"
+
+      - name: APK bauen
+        env:
+          APP_VERSION_CODE: ${{ github.run_number }}
+        run: gradle --no-daemon :app:assembleRelease
+
+      - name: APK einsammeln
+        id: apk
+        run: |
+          mkdir -p out
+          APK=$(find app/build/outputs/apk -name '*.apk' | head -1)
+          if [ -z "$APK" ]; then
+            echo "::error::Keine APK gefunden."
+            exit 1
+          fi
+          cp "$APK" out/Wichtelein2.apk
+          echo "Gebaut: $APK"
+          {
+            echo 'changes<<EOF'
+            git log -1 --pretty=%s
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Als GitHub Release bereitstellen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Wichtelein2 v0.1.0 (Build ${{ github.run_number }})
+          body: |
+            Build ${{ github.run_number }}.
+            Version 0.1.0, signiert mit dem gemeinsamen Release-Schlüssel.
+
+            Aenderungen in diesem Build:
+            ${{ steps.apk.outputs.changes }}
+
+            Unter Assets auf Wichtelein2.apk tippen.
+          files: out/Wichtelein2.apk
+
+      - name: Auch als Actions-Artefakt speichern
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wichtelein2-APK
+          path: out/Wichtelein2.apk

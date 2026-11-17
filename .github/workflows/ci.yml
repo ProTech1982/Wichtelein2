@@ -1,0 +1,69 @@
+name: Tests
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Unit-Tests und Debug-APK
+        run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-results
+          path: app/build/test-results/testDebugUnitTest/*.xml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Wichtelein2-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+  emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: KVM aktivieren
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Emulator-Tests (Rendern, Video-Export, Oberfläche)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: default
+          disable-animations: true
+          emulator-boot-timeout: 900
+          script: |
+            ./gradlew assembleDebug assembleDebugAndroidTest --stacktrace
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb shell am instrument -w -r app.wichtelein2.test/androidx.test.runner.AndroidJUnitRunner > /tmp/instrument.txt || true
+            cat /tmp/instrument.txt
+            adb exec-out run-as app.wichtelein2 tar cf - -C files/shots . > shots.tar || true
+            mkdir -p shots && tar xf shots.tar -C shots || true
+            grep -Eq "^OK \([0-9]+ tests?\)" /tmp/instrument.txt || touch /tmp/etest_failed
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: emulator-screenshots
+          path: shots/
+      - name: Ergebnis der Emulator-Tests
+        run: test ! -f /tmp/etest_failed

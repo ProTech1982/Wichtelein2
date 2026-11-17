@@ -1,0 +1,33 @@
+{
+ "cell": 224,
+ "feet": [
+  112.0,
+  179.2
+ ],
+ "pxPerMeter": 160.0,
+ "heightM": 0.984,
+ "dirs": 8,
+ "anims": {
+  "idle": 1,
+  "walk": 8,
+  "sneak": 8,
+  "run": 8,
+  "sweep": 8,
+  "scare": 6,
+  "duck": 4
+ },
+ "refLuma": {
+  "hat": 0.3462,
+  "jacket": 0.3929,
+  "pants": 0.3323,
+  "shoes": 0.5062
+ },
+ "views": {
+  "side": {
+   "elevation": 10
+  },
+  "top": {
+   "elevation": 68
+  }
+ }
+}

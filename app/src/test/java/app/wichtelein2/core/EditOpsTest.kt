@@ -1,0 +1,124 @@
+package app.wichtelein2.core
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class EditOpsTest {
+    private val p0 = Plan.default(1600, 1000)
+
+    @Test
+    fun arrowsMoveDoorAndStayInPhoto() {
+        val n = EditOps.nudge(p0)
+        val up = EditOps.move(p0, Sel.Door, 0f, -n)
+        assertEquals(p0.door.y - n, up.door.y, 0.001f)
+        val left = EditOps.move(p0, Sel.Door, -n, 0f)
+        assertEquals(p0.door.x - n, left.door.x, 0.001f)
+        val far = EditOps.move(p0, Sel.Door, -99999f, 99999f)
+        assertEquals(0f, far.door.x, 0.001f)
+        assertEquals(1000f, far.door.y, 0.001f)
+    }
+
+    @Test
+    fun rotateAndSizeDoor() {
+        val r = EditOps.rotate(p0, Sel.Door, 5f)
+        assertEquals(5f, r.door.rot, 0.001f)
+        val r2 = EditOps.rotate(EditOps.rotate(p0, Sel.Door, 179f), Sel.Door, 3f)
+        assertEquals(-178f, r2.door.rot, 0.001f)
+        val big = EditOps.scale(p0, Sel.Door, 1.5f)
+        assertEquals(p0.door.w * 1.5f, big.door.w, 0.01f)
+        assertEquals(p0.door.h * 1.5f, big.door.h, 0.01f)
+        val wide = EditOps.stretch(p0, Sel.Door, 2f, 1f)
+        assertEquals(p0.door.w * 2f, wide.door.w, 0.01f)
+        assertEquals(p0.door.h, wide.door.h, 0.01f)
+        val tiny = EditOps.scale(p0, Sel.Door, 0.0001f)
+        assertTrue(tiny.door.w >= 14f && tiny.door.h >= 14f)
+    }
+
+    @Test
+    fun addAndRemoveObjectsKeepsStepsConsistent() {
+        var p = EditOps.addObject(p0, ObjType.TREE)
+        val id = p.objects.single().id
+        p = EditOps.addStep(p, ActionType.HIDE)
+        assertEquals(id, p.steps.last().objectId)
+        assertEquals(Retreat.OBJECT, p.steps.last().retreat)
+        p = EditOps.removeObject(p, id)
+        assertTrue(p.objects.isEmpty())
+        assertEquals(-1, p.steps.last().objectId)
+        val ids = EditOps.addObject(EditOps.addObject(p0, ObjType.BED), ObjType.BOX).objects.map { it.id }
+        assertEquals(ids.distinct(), ids)
+    }
+
+    @Test
+    fun objectGetsPlacedOnGroundInSideView() {
+        val p = EditOps.addObject(p0, ObjType.BED)
+        assertTrue(p.objects[0].y > p0.horizon)
+        val top = EditOps.addObject(p0.copy(view = ViewMode.TOP), ObjType.BED)
+        assertEquals(500f, top.objects[0].y, 0.01f)
+    }
+
+    @Test
+    fun stepsCanBeAddedMovedRemoved() {
+        var p = EditOps.addStep(EditOps.addStep(p0, ActionType.SCARE), ActionType.HIDE)
+        assertEquals(listOf(ActionType.SWEEP, ActionType.SCARE, ActionType.HIDE), p.steps.map { it.action })
+        p = EditOps.moveStep(p, 2, -1)
+        assertEquals(listOf(ActionType.SWEEP, ActionType.HIDE, ActionType.SCARE), p.steps.map { it.action })
+        p = EditOps.moveStep(p, 0, -1)
+        assertEquals(ActionType.SWEEP, p.steps[0].action)
+        p = EditOps.removeStep(p, 1)
+        assertEquals(2, p.steps.size)
+        val one = EditOps.removeStep(p0, 0)
+        assertEquals(1, one.steps.size)
+        val withAt = EditOps.move(p, Sel.StepAt(0), 10f, 0f)
+        assertEquals(EditOps.defaultAt(p).x + 10f, withAt.steps[0].at!!.x, 0.01f)
+    }
+
+    @Test
+    fun hitTestPicksTopmostThenDoorThenHorizon() {
+        var p = EditOps.addObject(p0, ObjType.BED)
+        val bed = p.objects[0]
+        assertEquals(Sel.Obj(bed.id), EditOps.hit(p, bed.center, 20f))
+        val doorMid = Pt(p.door.x, p.door.y - p.door.h / 2f)
+        assertEquals(Sel.Door, EditOps.hit(p, doorMid, 20f))
+        assertEquals(Sel.Horizon, EditOps.hit(p, Pt(10f, p.horizon + 5f), 20f))
+        assertEquals(Sel.None, EditOps.hit(p, Pt(10f, 900f), 20f))
+        p = p.copy(view = ViewMode.TOP)
+        assertEquals(Sel.None, EditOps.hit(p, Pt(10f, p.horizon + 5f), 20f))
+        p = EditOps.updateStep(p, 0) { it.copy(at = Pt(100f, 100f)) }
+        assertEquals(Sel.StepAt(0), EditOps.hit(p, Pt(105f, 98f), 20f))
+    }
+
+    @Test
+    fun handleResizesDoorAndObject() {
+        val h = EditOps.handle(p0, Sel.Door)!!
+        val bigger = EditOps.dragHandle(p0, Sel.Door, Pt(h.x + 40f, h.y - 30f))
+        assertEquals(p0.door.w + 80f, bigger.door.w, 0.5f)
+        assertEquals(p0.door.h + 30f, bigger.door.h, 0.5f)
+        val p = EditOps.addObject(p0, ObjType.BOX)
+        val o = p.objects[0]
+        val oh = EditOps.handle(p, Sel.Obj(o.id))!!
+        val q = EditOps.dragHandle(p, Sel.Obj(o.id), Pt(oh.x + 10f, oh.y + 10f))
+        assertEquals(o.w + 20f, q.objects[0].w, 0.5f)
+        assertEquals(o.h + 20f, q.objects[0].h, 0.5f)
+        assertNotEquals(null, EditOps.handle(p0, Sel.Door))
+        assertEquals(null, EditOps.handle(p0, Sel.Horizon))
+    }
+
+    @Test
+    fun rotatedDoorHandleFollowsRotation() {
+        val p = p0.copy(door = p0.door.copy(rot = 90f))
+        val h = EditOps.handle(p, Sel.Door)!!
+        // 90° gedreht: aus „rechts oben“ wird „rechts unten“ relativ zur Basis
+        assertEquals(p.door.x + p.door.h, h.x, 0.01f)
+        val same = EditOps.dragHandle(p, Sel.Door, h)
+        assertEquals(p.door.w, same.door.w, 0.5f)
+        assertEquals(p.door.h, same.door.h, 0.5f)
+    }
+
+    @Test
+    fun horizonMovesOnlyVertically() {
+        val p = EditOps.move(p0, Sel.Horizon, 50f, 30f)
+        assertEquals(p0.horizon + 30f, p.horizon, 0.001f)
+    }
+}
