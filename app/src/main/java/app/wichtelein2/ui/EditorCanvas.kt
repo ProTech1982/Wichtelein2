@@ -5,6 +5,8 @@ import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.RectF
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -18,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -74,12 +77,24 @@ fun EditorCanvas(
     val onPlanC = rememberUpdatedState(onPlan)
     val onPickedC = rememberUpdatedState(onPicked)
     val density = LocalDensity.current.density
+    // Fingerauflage-Punkt (Bildpunkte im Canvas), damit der Treffertest dort ansetzt und nicht erst nach dem Tippabstand
+    val downPos = remember { floatArrayOf(0f, 0f) }
 
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Canvas(
             Modifier
                 .aspectRatio(plan.width.toFloat() / plan.height.toFloat())
                 .testTag("editor_canvas")
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        val d = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        downPos[0] = d.position.x
+                        downPos[1] = d.position.y
+                        do {
+                            val e = awaitPointerEvent(PointerEventPass.Initial)
+                        } while (e.changes.any { it.pressed })
+                    }
+                }
                 .pointerInput(plan.width, plan.height) {
                     detectTapGestures { off ->
                         val k = size.width / planState.value.width.toFloat()
@@ -92,9 +107,9 @@ fun EditorCanvas(
                     var target: Sel = Sel.None
                     var working: Plan = planState.value   // Zwischenstand, damit schnelle Ziehbewegungen nichts verlieren
                     detectDragGestures(
-                        onDragStart = { off ->
+                        onDragStart = { _ ->
                             val k = size.width / planState.value.width.toFloat()
-                            val p = Pt(off.x / k, off.y / k)
+                            val p = Pt(downPos[0] / k, downPos[1] / k)
                             val tol = 28f * density / k
                             working = planState.value
                             val h = EditOps.handle(planState.value, selState.value)
