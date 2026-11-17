@@ -105,7 +105,12 @@ class UiTest {
             if (last != null && cond(last)) return last
             Thread.sleep(150)
         }
-        throw AssertionError("Plan erfüllt nicht: $what; zuletzt: $last")
+        val ui = try {
+            rule.onNodeWithTag("editor_root").fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription)
+        } catch (e: Throwable) {
+            "keine Oberfläche: ${e.message}"
+        }
+        throw AssertionError("Plan erfüllt nicht: $what; Oberfläche zeigt: $ui; gespeichert: $last")
     }
 
     private fun shot(name: String) {

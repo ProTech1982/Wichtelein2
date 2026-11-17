@@ -29,6 +29,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.wichtelein2.core.EditOps
@@ -70,7 +72,14 @@ fun EditorScreen(
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
     val panelMax = maxHeight * 0.42f
-    Column(Modifier.fillMaxSize().testTag("editor_root")) {
+    Column(
+        Modifier.fillMaxSize().testTag("editor_root").semantics {
+            // Zustand für Tests und Bedienhilfen: Ansicht, Tür, Anzahl Gegenstände und Schritte
+            stateDescription = "Ansicht ${plan.view.key}, Tür ${plan.door.x.toInt()}/${plan.door.y.toInt()} " +
+                "${plan.door.w.toInt()}x${plan.door.h.toInt()} ${plan.door.rot.toInt()}°, " +
+                "${plan.objects.size} Gegenstände, ${plan.steps.size} Schritte"
+        },
+    ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
