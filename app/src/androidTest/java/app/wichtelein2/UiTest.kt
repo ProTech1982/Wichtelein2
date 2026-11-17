@@ -14,7 +14,8 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.wichtelein2.core.ActionType
@@ -317,10 +318,10 @@ class UiTest {
         tap("music_0")
         rule.waitUntil(5_000) { SettingsStore(ctx).load().music == 0 }
         rule.onNodeWithTag("fx_volume").performScrollTo()
-        rule.onNodeWithTag("fx_volume").performTouchInput { swipeLeft() }
+        rule.onNodeWithTag("fx_volume").performSemanticsAction(SemanticsActions.SetProgress) { it(0.2f) }
         rule.waitUntil(5_000) { SettingsStore(ctx).load().fxVolume < 0.5f }
         rule.onNodeWithTag("music_volume").performScrollTo()
-        rule.onNodeWithTag("music_volume").performTouchInput { swipeLeft() }
+        rule.onNodeWithTag("music_volume").performSemanticsAction(SemanticsActions.SetProgress) { it(0.1f) }
         rule.waitUntil(5_000) { SettingsStore(ctx).load().musicVolume < 0.3f }
         shot("ui_settings_sound")
     }
