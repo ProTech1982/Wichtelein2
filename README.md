@@ -19,7 +19,12 @@ nicht als Fortsetzung von Wichtelein. Der Wichtel und der Besen kommen aus Blend
 - **Video** (MP4, ohne Ton) wird auf dem Handy gerendert und in „Filme/Wichtelein2“ gespeichert.
 - **Update** wie bei Wichtelein: Prüfung gegen die GitHub-Releases, Fenster mit Änderungsprotokoll und „Jetzt updaten“.
 
-Bewusst nicht enthalten (so gewünscht): Musik, Geräusche, Sprechen.
+- **Ton (ab 0.2.0)**: selbst erzeugte Geräusche (Schritte, Mützenglöckchen, Tür quietscht/fällt zu, Besen, Erschrecken, Rascheln beim Ducken)
+  und vier Spieluhr-Melodien (Schneeflocke, O Tannenbaum, Jingle Bells, Stille Nacht). Lautstärken und Aus-Schalter in den Einstellungen;
+  Vorschau spielt mit Ton, das Video bekommt eine AAC-Tonspur. **Der Wichtel spricht nicht.**
+- **AR-Wichtel (ab 0.2.0)**: Startseite → „AR-Wichtel“. ARCore erkennt den Boden, ein Tipp stellt die Wichteltür in den echten Raum. Der Wichtel kommt
+  heraus, fegt, versteckt sich oder erschrickt (Auswahl: Alles / Fegen / Verstecken / Erschrecken), mit Ton. Von der Seite sieht man die seitlichen Bilder,
+  von oben die Draufsicht, und er dreht sich passend, wenn man um ihn herumgeht. Braucht ein ARCore-Handy; ohne ARCore erklärt die App das.
 
 ## Vorschau (Bilder aus den Emulator-Tests)
 | Editor | Objekte | Ablauf | Einstellungen (dunkel) |

@@ -29,6 +29,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,6 +49,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.wichtelein2.core.Anim
+import app.wichtelein2.core.MusicTrack
 import app.wichtelein2.core.ViewMode
 import app.wichtelein2.core.WichtelColors
 import app.wichtelein2.data.AppSettings
@@ -100,6 +102,47 @@ fun SettingsScreen(
             onClick = { onChange(settings.copy(colors = WichtelColors())) },
             modifier = Modifier.padding(top = 8.dp).testTag("colors_reset"),
         ) { Text("Alle Originalfarben") }
+        Spacer(Modifier.height(20.dp))
+
+        Text("Ton (Geräusche und Musik, der Wichtel spricht nicht)", fontWeight = FontWeight.SemiBold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(
+                checked = settings.soundFx,
+                onCheckedChange = { onChange(settings.copy(soundFx = it)) },
+                modifier = Modifier.testTag("sound_fx"),
+            )
+            Spacer(Modifier.size(10.dp))
+            Text("Geräusche (Schritte, Tür, Besen, Glöckchen)")
+        }
+        Text("Lautstärke Geräusche", fontSize = 12.sp)
+        Slider(
+            value = settings.fxVolume,
+            onValueChange = { onChange(settings.copy(fxVolume = it)) },
+            modifier = Modifier.testTag("fx_volume"),
+        )
+        Text("Musik", fontSize = 14.sp)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = settings.music == 0,
+                onClick = { onChange(settings.copy(music = 0)) },
+                label = { Text("Aus") },
+                modifier = Modifier.testTag("music_0"),
+            )
+            MusicTrack.entries.forEachIndexed { i, t ->
+                FilterChip(
+                    selected = settings.music == i + 1,
+                    onClick = { onChange(settings.copy(music = i + 1)) },
+                    label = { Text(t.label) },
+                    modifier = Modifier.testTag("music_${i + 1}"),
+                )
+            }
+        }
+        Text("Lautstärke Musik", fontSize = 12.sp)
+        Slider(
+            value = settings.musicVolume,
+            onValueChange = { onChange(settings.copy(musicVolume = it)) },
+            modifier = Modifier.testTag("music_volume"),
+        )
         Spacer(Modifier.height(20.dp))
 
         Text("App und Updates", fontWeight = FontWeight.SemiBold)

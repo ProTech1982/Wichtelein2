@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.wichtelein2.core.ActionType
@@ -27,6 +28,7 @@ import app.wichtelein2.core.Retreat
 import app.wichtelein2.core.ViewMode
 import app.wichtelein2.data.ProjectStore
 import app.wichtelein2.data.SettingsStore
+import androidx.test.rule.GrantPermissionRule
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -39,7 +41,11 @@ import org.junit.runner.RunWith
 /** Bedienung der App auf dem kleinen Emulator-Bildschirm (320 x 640): alles muss erreichbar sein. */
 @RunWith(AndroidJUnit4::class)
 class UiTest {
-    @get:Rule
+    // Kamera-Erlaubnis vorab (AR-Bildschirm und Foto-Aufnahme fragen sonst mit einem System-Fenster)
+    @get:Rule(order = 0)
+    val permission: GrantPermissionRule = GrantPermissionRule.grant(android.Manifest.permission.CAMERA)
+
+    @get:Rule(order = 1)
     val rule = createEmptyComposeRule()
 
     private val ctx = TestUtil.context
@@ -128,7 +134,8 @@ class UiTest {
         rule.onNodeWithTag("btn_take_photo").assertIsDisplayed()
         rule.onNodeWithTag("btn_continue").assertIsDisplayed()
         rule.onNodeWithTag("btn_settings").assertIsDisplayed()
-        rule.onNodeWithText("Version 0.1.0").assertIsDisplayed()
+        rule.onNodeWithText("Version 0.2.0").assertIsDisplayed()
+        rule.onNodeWithTag("btn_ar").assertIsDisplayed()
         shot("ui_home")
     }
 
@@ -294,5 +301,50 @@ class UiTest {
         tap("btn_update")
         rule.waitUntil(15_000) { has("update_dialog") }
         rule.onNodeWithTag("update_dialog").assertIsDisplayed()
+    }
+
+    @Test
+    fun soundSettingsAreStored() {
+        start()
+        rule.onNodeWithTag("btn_settings").performClick()
+        assertTrue("Geräusche sind standardmäßig an", SettingsStore(ctx).load().soundFx)
+        tap("sound_fx")
+        rule.waitUntil(5_000) { !SettingsStore(ctx).load().soundFx }
+        tap("sound_fx")
+        rule.waitUntil(5_000) { SettingsStore(ctx).load().soundFx }
+        tap("music_3")
+        rule.waitUntil(5_000) { SettingsStore(ctx).load().music == 3 }
+        tap("music_0")
+        rule.waitUntil(5_000) { SettingsStore(ctx).load().music == 0 }
+        rule.onNodeWithTag("fx_volume").performScrollTo()
+        rule.onNodeWithTag("fx_volume").performTouchInput { swipeLeft() }
+        rule.waitUntil(5_000) { SettingsStore(ctx).load().fxVolume < 0.5f }
+        rule.onNodeWithTag("music_volume").performScrollTo()
+        rule.onNodeWithTag("music_volume").performTouchInput { swipeLeft() }
+        rule.waitUntil(5_000) { SettingsStore(ctx).load().musicVolume < 0.3f }
+        shot("ui_settings_sound")
+    }
+
+    @Test
+    fun previewHasSoundSwitch() {
+        openEditor()
+        rule.onNodeWithTag("btn_preview").performClick()
+        rule.waitUntil(30_000) { has("preview_canvas") }
+        rule.onNodeWithTag("preview_mute").assertIsDisplayed()
+        rule.onNodeWithTag("preview_mute").performClick()
+        rule.onNodeWithText("🔇 Ton aus").assertIsDisplayed()
+        rule.onNodeWithTag("preview_close").performClick()
+    }
+
+    @Test
+    fun arScreenOpensAndGoesBack() {
+        start()
+        rule.onNodeWithTag("btn_ar").performClick()
+        rule.waitUntil(15_000) { has("ar_root") }
+        // Der Emulator hat kein ARCore: es muss eine verständliche Meldung kommen (oder, wo AR geht, der Hinweis zum Boden)
+        rule.waitUntil(60_000) { has("ar_message") || has("ar_hint") }
+        shot("ui_ar")
+        rule.onNodeWithTag("ar_back").performClick()
+        rule.waitUntil(10_000) { has("btn_ar") }
     }
 }

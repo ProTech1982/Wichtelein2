@@ -80,7 +80,7 @@ class Renderer(
 
     /** Hinter der Tür: Innenraum (durch die Türöffnung begrenzt) und der Wichtel, solange er überwiegend drinnen ist. */
     @Suppress("DEPRECATION")
-    private fun drawDoorBack(canvas: Canvas, f: Frame?, houseT: Float) {
+    fun drawDoorBack(canvas: Canvas, f: Frame?, houseT: Float) {
         val d = plan.door
         val dm = sprites.doorMeta(d.shape)
         updateDoorMatrix()
@@ -108,7 +108,7 @@ class Renderer(
         return (if (plan.door.openDir == OpenDir.OUT) "o" else "i") + deg
     }
 
-    private fun drawDoorFront(canvas: Canvas, open: Float) {
+    fun drawDoorFront(canvas: Canvas, open: Float) {
         val d = plan.door
         updateDoorMatrix()
         canvas.save()
@@ -125,21 +125,28 @@ class Renderer(
 
     /** Zeichnet den Wichtel mit den Füßen bei (x, y); houseT blendet ihn beim Betreten der Tür aus. */
     fun drawWichtel(canvas: Canvas, x: Float, y: Float, dir: Int, anim: Anim, frame: Int, houseT: Float, scaleExtra: Float = 1f) {
+        drawWichtelPx(canvas, plan.view, x, y, scaler.heightAt(y) * scaleExtra, dir, anim, frame, houseT)
+    }
+
+    /**
+     * Zeichnet den Wichtel mit den Füßen bei (x, y) und der Körperhöhe [hpx] (in Canvas-Einheiten) mit den Bildern
+     * der Ansicht [view]. Wird auch vom AR-Modus genutzt, der Ort und Größe aus der Kamera berechnet.
+     */
+    fun drawWichtelPx(canvas: Canvas, view: ViewMode, x: Float, y: Float, hpx: Float, dir: Int, anim: Anim, frame: Int, houseT: Float) {
         val meta = sprites.meta
-        val hpx = scaler.heightAt(y) * scaleExtra
         val alpha = 1f - smooth((houseT - 0.55f) / 0.45f)
         if (alpha <= 0.01f) return
         val k = 1f - 0.30f * houseT
         val s = hpx * k / meta.heightPx
         val yOff = -0.10f * hpx * houseT
-        val sheet = sprites.sheet(plan.view, anim)
+        val sheet = sprites.sheet(view, anim)
         val c = meta.cell
         val src = Rect(frame * c, dir * c, (frame + 1) * c, (dir + 1) * c)
         val left = x - meta.feetX * s
         val top = y + yOff - meta.feetY * s
         // weicher Schatten am Boden
         val rx = 0.24f * hpx * k
-        val ry = (if (plan.view == ViewMode.SIDE) 0.055f else 0.10f) * hpx * k
+        val ry = (if (view == ViewMode.SIDE) 0.055f else 0.10f) * hpx * k
         shadowPaint.color = ((0x55 * alpha).toInt() shl 24)
         canvas.drawOval(RectF(x - rx, y - ry, x + rx, y + ry), shadowPaint)
         paint.alpha = (alpha * 255f).toInt().coerceIn(0, 255)

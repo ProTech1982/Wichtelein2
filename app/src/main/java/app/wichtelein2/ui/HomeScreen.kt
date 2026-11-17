@@ -32,6 +32,7 @@ fun HomeScreen(
     onPick: () -> Unit,
     onTake: () -> Unit,
     onContinue: () -> Unit,
+    onAr: () -> Unit,
     onSettings: () -> Unit,
     onUpdateHint: () -> Unit,
 ) {
@@ -58,6 +59,8 @@ fun HomeScreen(
                 Text("Mit dem letzten Projekt weitermachen")
             }
         }
+        Spacer(Modifier.height(10.dp))
+        Button(onClick = onAr, enabled = !busy, modifier = Modifier.fillMaxWidth().testTag("btn_ar")) { Text("AR-Wichtel (Kamera, echter Raum)") }
         Spacer(Modifier.height(10.dp))
         OutlinedButton(onClick = onSettings, modifier = Modifier.fillMaxWidth().testTag("btn_settings")) { Text("Einstellungen") }
         if (message != null) {

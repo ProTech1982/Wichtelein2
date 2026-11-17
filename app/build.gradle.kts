@@ -14,7 +14,7 @@ android {
         targetSdk = 35
         // Build-Nummer aus GitHub Actions: nötig, damit Updates über die bestehende Installation passen.
         versionCode = (System.getenv("APP_VERSION_CODE") ?: "1").toInt()
-        versionName = "0.1.0"
+        versionName = "0.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -58,6 +58,8 @@ dependencies {
     implementation("androidx.exifinterface:exifinterface:1.3.7")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+    // echtes AR (Boden erkennen, Wichtel in den Raum stellen)
+    implementation("com.google.ar:core:1.45.0")
 
     implementation(platform("androidx.compose:compose-bom:2024.10.01"))
     implementation("androidx.compose.ui:ui")

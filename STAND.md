@@ -3,6 +3,14 @@
 Auftrag: Wichtelein2 als komplett neues Projekt (Version 0.1.0), 3D-Wichtel + Besen aus Blender, Tür, Wegfindung, 3 Aktionen,
 Farben, Design, Update. Details siehe README.md.
 
+## Version 0.2.0 (Zweig v0.2.0-entwicklung)
+- Ton: `core/Sound.kt` (Fx, SoundSynth, MusicSynth, SoundPlan aus den Simulator-Bildern, Mixdown), `audio/AudioPlayer.kt` (Abspielen), `audio/AudioMux.kt`
+  (Tonspur als AAC in das fertige Video), Einstellungen (Geräusche an/aus, Musik 0-4, Lautstärken), Ton-Schalter in der Vorschau. Kein Sprechen.
+- AR: `core/ArMath.kt` (Projektion, Blickwinkel, Drehung zum Betrachter, rein rechnerisch getestet), `ar/ArRenderer.kt` (ARCore + GL-Kamerabild),
+  `ar/ArDrawer.kt` (Tür als aufrechtes Bild am Anker, Wichtel nach Kamera-Perspektive), `ar/ArScreen.kt`. Nur Live-Ansicht, kein Video.
+- Neue Tests: `SoundTest`, `ArMathTest` (JVM), `SoundArTest` (Emulator: Tonspur im Video, AR-Zeichnen mit künstlicher Kamera), UiTest (Ton-Einstellungen, AR-Bildschirm).
+- Nicht prüfbar ohne echtes Handy: ARCore-Bodenerkennung und Verankerung, Ton über Lautsprecher.
+
 ## Version 0.1.0
 - Kern (`core/`): `Plan` (Foto, Ansicht seitlich/oben, Horizont, Tür, Gegenstände, Schritte), `NavGrid` (A* mit Standflächen,
   Gras-Kosten, Horizont), `Simulator` (30 Bilder/s: Tür auf, herauskommen, Schritte, wieder hinein; Schleichen/Rennen/Fegen/Erschrecken/Ducken),

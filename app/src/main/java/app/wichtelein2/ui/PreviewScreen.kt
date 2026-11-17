@@ -18,7 +18,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -32,7 +35,13 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.wichtelein2.audio.AudioPlayer
+import app.wichtelein2.core.MusicChoice
+import app.wichtelein2.core.Mixdown
 import app.wichtelein2.core.Plan
+import app.wichtelein2.data.AppSettings
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import app.wichtelein2.core.Simulation
 import app.wichtelein2.render.Renderer
 import app.wichtelein2.render.SpriteLibrary
@@ -46,11 +55,27 @@ fun PreviewScreen(
     sprites: SpriteLibrary,
     customInterior: Bitmap?,
     sim: Simulation,
+    settings: AppSettings,
     onClose: () -> Unit,
 ) {
     val renderer = remember(plan, photo, customInterior) { Renderer(plan, photo, sprites, customInterior) }
     var t by remember { mutableFloatStateOf(0f) }
     var playing by remember { mutableStateOf(true) }
+    var muted by remember { mutableStateOf(false) }
+
+    // Ton: einmal mischen, dann ab der aktuellen Stelle abspielen (Pause, Springen und Neustart starten ihn neu)
+    val audio = remember { AudioPlayer() }
+    DisposableEffect(Unit) { onDispose { audio.stop() } }
+    val mix by produceState<FloatArray?>(null, sim, settings.soundFx, settings.music, settings.fxVolume, settings.musicVolume) {
+        value = withContext(Dispatchers.Default) {
+            Mixdown.mix(sim, settings.soundFx, MusicChoice.track(settings.music), settings.fxVolume, settings.musicVolume)
+        }
+    }
+    var restartCount by remember { mutableIntStateOf(0) }
+    LaunchedEffect(playing, muted, mix, restartCount) {
+        val m = mix
+        if (playing && !muted && m != null) audio.play(m, t) else audio.stop()
+    }
 
     LaunchedEffect(playing, sim) {
         if (!playing) return@LaunchedEffect
@@ -103,7 +128,8 @@ fun PreviewScreen(
                     },
                     modifier = Modifier.testTag("preview_play"),
                 ) { Text(if (playing) "❚❚ Pause" else "▶ Abspielen") }
-                OutlinedButton(onClick = { t = 0f; playing = true }, modifier = Modifier.testTag("preview_restart")) { Text("Von vorn") }
+                OutlinedButton(onClick = { muted = !muted }, modifier = Modifier.testTag("preview_mute")) { Text(if (muted) "🔇 Ton aus" else "🔊 Ton an") }
+                OutlinedButton(onClick = { t = 0f; playing = true; restartCount++ }, modifier = Modifier.testTag("preview_restart")) { Text("Von vorn") }
                 OutlinedButton(onClick = onClose, modifier = Modifier.testTag("preview_close")) { Text("Schließen") }
             }
         }

@@ -11,13 +11,14 @@ import android.media.MediaMuxer
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
+import app.wichtelein2.audio.AudioMux
 import app.wichtelein2.core.Plan
 import app.wichtelein2.core.Simulation
 import java.io.File
 import kotlin.math.max
 import kotlin.math.min
 
-/** Schreibt den Ablauf als MP4 (H.264, ohne Ton): Bild für Bild gezeichnet und in den Encoder gegeben. */
+/** Schreibt den Ablauf als MP4 (H.264, mit Ton, wenn [audio] übergeben wird): Bild für Bild gezeichnet und in den Encoder gegeben. */
 object Exporter {
     class Result(val file: File, val frames: Int, val width: Int, val height: Int)
 
@@ -28,6 +29,7 @@ object Exporter {
         customInterior: Bitmap?,
         sim: Simulation,
         out: File,
+        audio: FloatArray? = null,
         maxSide: Int = 1280,
         onProgress: (Float) -> Unit = {},
         cancelled: () -> Boolean = { false },
@@ -40,6 +42,9 @@ object Exporter {
         val fps = sim.fps
         val renderer = Renderer(plan, photo, sprites, customInterior)
         out.parentFile?.mkdirs()
+        // mit Ton: erst das Bild-Video, dann die Tonspur dazumischen
+        val target = if (audio != null) File(out.path + ".video") else out
+        if (target.exists()) target.delete()
         if (out.exists()) out.delete()
 
         val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, w, h).apply {
@@ -52,7 +57,7 @@ object Exporter {
         encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
         val surface = encoder.createInputSurface()
         encoder.start()
-        val muxer = MediaMuxer(out.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        val muxer = MediaMuxer(target.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
         var track = -1
         var muxStarted = false
         var written = 0
@@ -121,6 +126,14 @@ object Exporter {
             try { if (muxStarted) muxer.stop() } catch (_: Exception) { }
             muxer.release()
             frameBmp.recycle()
+        }
+        if (audio != null) {
+            try {
+                if (cancelled()) throw InterruptedException("abgebrochen")
+                AudioMux.addAudio(target, audio, out)
+            } finally {
+                target.delete()
+            }
         }
         return Result(out, written, w, h)
     }

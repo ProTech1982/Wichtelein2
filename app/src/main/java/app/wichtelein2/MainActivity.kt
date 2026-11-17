@@ -33,7 +33,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.core.content.FileProvider
+import app.wichtelein2.ar.ArScreen
 import app.wichtelein2.core.InteriorKind
+import app.wichtelein2.core.Mixdown
+import app.wichtelein2.core.MusicChoice
 import app.wichtelein2.core.Plan
 import app.wichtelein2.core.Simulation
 import app.wichtelein2.core.Simulator
@@ -66,7 +69,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { HOME, EDITOR, PREVIEW, SETTINGS }
+private enum class Screen { HOME, EDITOR, PREVIEW, SETTINGS, AR }
 
 private sealed interface ExportState {
     class Running(val progress: Float) : ExportState
@@ -148,6 +151,23 @@ private fun App() {
     val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         if (ok) importFrom(FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", File(ctx.cacheDir, "camera/photo.jpg")))
     }
+    var pendingTake by remember { mutableStateOf(false) }
+    fun launchTake() {
+        val f = File(ctx.cacheDir, "camera/photo.jpg")
+        f.parentFile?.mkdirs()
+        try {
+            takePhoto.launch(FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", f))
+        } catch (e: Exception) {
+            message = "Keine Kamera-App gefunden. Bitte ein Foto aus der Galerie wählen."
+        }
+    }
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (pendingTake) {
+            pendingTake = false
+            // ohne Erlaubnis kann die Kamera-App nicht über uns starten (Android verlangt sie, wenn die App sie deklariert)
+            if (ok) launchTake() else message = "Für ein Foto mit der Kamera braucht die App die Kamera-Erlaubnis. Du kannst auch ein Foto aus der Galerie wählen."
+        }
+    }
     val pickInterior = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) scope.launch {
             val ok = withContext(Dispatchers.IO) { project.importInterior(uri) }
@@ -178,8 +198,10 @@ private fun App() {
                     val s = Simulator(p).run()
                     val name = "Wichtelein2_" + System.currentTimeMillis() / 1000 + ".mp4"
                     val out = File(ctx.filesDir, "exports/$name")
+                    // Ton (Geräusche und Musik) laut Einstellungen in die Tonspur mischen
+                    val pcm = Mixdown.mix(s, settings.soundFx, MusicChoice.track(settings.music), settings.fxVolume, settings.musicVolume)
                     Exporter.export(
-                        p, ph, sprites, interior, s, out,
+                        p, ph, sprites, interior, s, out, audio = pcm,
                         onProgress = { export = ExportState.Running(it) },
                         cancelled = { exportCancelled.get() },
                     ).file
@@ -205,12 +227,11 @@ private fun App() {
                     updateHint = updateResult?.let { "Update verfügbar: ${it.version ?: ""}" },
                     onPick = { pickPhoto.launch("image/*") },
                     onTake = {
-                        val f = File(ctx.cacheDir, "camera/photo.jpg")
-                        f.parentFile?.mkdirs()
-                        try {
-                            takePhoto.launch(FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", f))
-                        } catch (e: Exception) {
-                            message = "Keine Kamera-App gefunden. Bitte ein Foto aus der Galerie wählen."
+                        if (androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                            launchTake()
+                        } else {
+                            pendingTake = true
+                            cameraPermission.launch(android.Manifest.permission.CAMERA)
                         }
                     },
                     onContinue = {
@@ -223,6 +244,7 @@ private fun App() {
                             if (pl != null && bmp != null) openProject(pl, bmp) else message = "Das letzte Projekt ist nicht mehr da."
                         }
                     },
+                    onAr = { screen = Screen.AR },
                     onSettings = { screen = Screen.SETTINGS },
                     onUpdateHint = { updateResult?.let { updateDialog = updateDialogFrom(it) } },
                 )
@@ -261,13 +283,17 @@ private fun App() {
                         )
                     }
                 }
+                Screen.AR -> {
+                    BackHandler { screen = Screen.HOME }
+                    ArScreen(settings, sprites) { screen = Screen.HOME }
+                }
                 Screen.PREVIEW -> {
                     val p = plan
                     val ph = photo
                     val s = sim
                     if (p != null && ph != null && s != null) {
                         BackHandler { screen = Screen.EDITOR }
-                        PreviewScreen(p, ph, sprites, interior, s) { screen = Screen.EDITOR }
+                        PreviewScreen(p, ph, sprites, interior, s, settings) { screen = Screen.EDITOR }
                     }
                 }
             }
