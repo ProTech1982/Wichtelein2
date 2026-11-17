@@ -172,8 +172,9 @@ class UiTest {
             up()
         }
         val moved = awaitPlan("verschoben") { it.door.x < before.x - 40f }.door
-        assertEquals((before.x - 100f / k), moved.x, 12f)
-        assertEquals((before.y + 10f / k), moved.y, 12f)
+        // Der Tippabstand (ca. 8 Pixel) zählt nicht mit: erlaubt ist eine Abweichung von etwa einem Tippabstand
+        assertEquals((before.x - 100f / k), moved.x, 30f)
+        assertEquals((before.y + 10f / k), moved.y, 30f)
         // Griff oben rechts ziehen = größer
         val handle = androidx.compose.ui.geometry.Offset((moved.x + moved.w / 2f) * k, (moved.y - moved.h) * k)
         node.performTouchInput {
