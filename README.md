@@ -21,6 +21,16 @@ nicht als Fortsetzung von Wichtelein. Der Wichtel und der Besen kommen aus Blend
 
 Bewusst nicht enthalten (so gewünscht): Musik, Geräusche, Sprechen.
 
+## Vorschau (Bilder aus den Emulator-Tests)
+| Editor | Objekte | Ablauf | Einstellungen (dunkel) |
+|---|---|---|---|
+| ![Editor](docs/vorschau/editor.png) | ![Objekte](docs/vorschau/objekte.png) | ![Ablauf](docs/vorschau/ablauf.png) | ![Dunkel](docs/vorschau/einstellungen-dunkel.png) |
+
+Ablauf mit allen Aktionen, seitlich und von oben (Kontaktbögen aus `SequenceTest`):
+
+![Seitlich](docs/vorschau/ablauf-seitlich.png)
+![Von oben](docs/vorschau/ablauf-oben.png)
+
 ## Aufbau
 | Ordner | Inhalt |
 |---|---|

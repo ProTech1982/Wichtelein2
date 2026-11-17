@@ -66,6 +66,19 @@ class ExportTest {
     }
 
     @Test
+    fun cancelledExportStopsWithInterruption() {
+        val plan = Plan.default(640, 480)
+        val sim = Simulator(plan).run()
+        var thrown = false
+        try {
+            Exporter.export(plan, TestUtil.photo(640, 480), SpriteLibrary(ctx), null, sim, File(ctx.filesDir, "exports/abbruch.mp4"), maxSide = 320, cancelled = { true })
+        } catch (e: InterruptedException) {
+            thrown = true
+        }
+        assertTrue("Abbruch muss den Export beenden", thrown)
+    }
+
+    @Test
     fun exportsAllActionsInTopAndSideView() {
         for (view in ViewMode.entries) {
             val tree = SceneObject(1, ObjType.TREE, 200f, 250f, 160f, 240f)

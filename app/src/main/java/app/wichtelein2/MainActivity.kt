@@ -93,6 +93,7 @@ private fun App() {
     var message by remember { mutableStateOf<String?>(null) }
     var sim by remember { mutableStateOf<Simulation?>(null) }
     var export by remember { mutableStateOf<ExportState?>(null) }
+    val exportCancelled = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
     var updateResult by remember { mutableStateOf<UpdateCheck.Result?>(null) }
     var updateDialog by remember { mutableStateOf<UpdateDialogState?>(null) }
 
@@ -170,16 +171,23 @@ private fun App() {
         val p = plan ?: return
         val ph = photo ?: return
         export = ExportState.Running(0f)
+        exportCancelled.set(false)
         scope.launch {
             try {
                 val file = withContext(Dispatchers.Default) {
                     val s = Simulator(p).run()
                     val name = "Wichtelein2_" + System.currentTimeMillis() / 1000 + ".mp4"
                     val out = File(ctx.filesDir, "exports/$name")
-                    Exporter.export(p, ph, sprites, interior, s, out, onProgress = { export = ExportState.Running(it) }).file
+                    Exporter.export(
+                        p, ph, sprites, interior, s, out,
+                        onProgress = { export = ExportState.Running(it) },
+                        cancelled = { exportCancelled.get() },
+                    ).file
                 }
                 val uri = withContext(Dispatchers.IO) { Exporter.saveToGallery(ctx, file) }
                 export = ExportState.Done(file, uri)
+            } catch (e: InterruptedException) {
+                export = null
             } catch (e: Throwable) {
                 export = ExportState.Failed(e.message ?: e.javaClass.simpleName)
             }
@@ -199,7 +207,11 @@ private fun App() {
                     onTake = {
                         val f = File(ctx.cacheDir, "camera/photo.jpg")
                         f.parentFile?.mkdirs()
-                        takePhoto.launch(FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", f))
+                        try {
+                            takePhoto.launch(FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", f))
+                        } catch (e: Exception) {
+                            message = "Keine Kamera-App gefunden. Bitte ein Foto aus der Galerie wählen."
+                        }
                     },
                     onContinue = {
                         scope.launch {
@@ -279,7 +291,9 @@ private fun App() {
                         Text("%d %%".format((e.progress * 100).toInt()))
                     }
                 },
-                confirmButton = { },
+                confirmButton = {
+                    TextButton(onClick = { exportCancelled.set(true) }, modifier = Modifier.testTag("export_cancel")) { Text("Abbrechen") }
+                },
             )
             is ExportState.Done -> AlertDialog(
                 onDismissRequest = { export = null },
