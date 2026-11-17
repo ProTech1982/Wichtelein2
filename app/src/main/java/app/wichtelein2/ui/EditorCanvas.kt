@@ -98,7 +98,8 @@ fun EditorCanvas(
                             val tol = 28f * density / k
                             working = planState.value
                             val h = EditOps.handle(planState.value, selState.value)
-                            if (h != null && h.dist(p) <= tol * 1.3f) {
+                            // Griff nur nahe an seinem Kreis, damit kleine Türen und Gegenstände am Körper verschiebbar bleiben
+                            if (h != null && h.dist(p) <= 18f * density / k) {
                                 mode = DragMode.Resize
                             } else {
                                 val hit = EditOps.hit(planState.value, p, tol)
