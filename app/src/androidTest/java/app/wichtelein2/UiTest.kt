@@ -1,5 +1,6 @@
 package app.wichtelein2
 
+import android.util.Log
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
@@ -79,7 +80,15 @@ class UiTest {
     private fun tap(tag: String) {
         val n: SemanticsNodeInteraction = rule.onNodeWithTag(tag)
         n.performScrollTo()
+        val b = n.fetchSemanticsNode().boundsInRoot
+        val root = rule.onRoot().fetchSemanticsNode().boundsInRoot
+        try {
+            n.assertIsDisplayed()
+        } catch (e: AssertionError) {
+            throw AssertionError("$tag nicht sichtbar: Knoten $b, Fenster $root", e)
+        }
         n.performClick()
+        Log.i("UiTest", "getippt $tag bei $b (Fenster $root)")
     }
 
     /** Reiter unten im Editor (nicht scrollbar). */
