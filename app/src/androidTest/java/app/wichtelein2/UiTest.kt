@@ -101,6 +101,9 @@ class UiTest {
         var last: Plan? = null
         val end = System.currentTimeMillis() + 8_000
         while (System.currentTimeMillis() < end) {
+            // Im Test läuft die Compose-Uhr nur mit: ohne diesen Schritt käme das verzögerte Autospeichern (delay 250 ms) nie dran
+            rule.mainClock.advanceTimeBy(300)
+            Thread.sleep(100)
             last = ProjectStore(ctx).loadPlan()
             if (last != null && cond(last)) return last
             Thread.sleep(150)
