@@ -256,9 +256,21 @@ class Simulator(private val plan: Plan, private val fps: Int = 30) {
     }
 
     // ------------------------------------------------------------------ Ziele
+    /** Vorgeschlagene Stelle am Boden: frei begehbar und nicht von einem markierten Gegenstand verdeckt, damit man den Wichtel sieht. */
     private fun floorPoint(fx: Float): Pt {
-        val y = if (plan.view == ViewMode.SIDE) plan.horizon + (plan.height - plan.horizon) * 0.65f else plan.height * 0.55f
-        return nav.nearestFree(Pt(plan.width * fx, y))
+        val ys = if (plan.view == ViewMode.SIDE) {
+            listOf(0.65f, 0.8f, 0.5f, 0.92f, 0.35f).map { plan.horizon + (plan.height - plan.horizon) * it }
+        } else {
+            listOf(0.55f, 0.75f, 0.35f, 0.9f, 0.15f).map { plan.height * it }
+        }
+        val xs = listOf(fx, 0.5f, 0.35f, 0.65f, 0.2f, 0.8f)
+        for (y in ys) {
+            for (x in xs) {
+                val p = Pt(plan.width * x, y)
+                if (nav.isFree(p) && plan.objects.none { it.contains(p) }) return p
+            }
+        }
+        return nav.nearestFree(Pt(plan.width * fx, ys[0]))
     }
 
     private fun autoSweepPoint() = floorPoint(if (plan.door.x > plan.width / 2f) 0.35f else 0.65f)

@@ -168,6 +168,22 @@ class SimulatorTest {
     }
 
     @Test
+    fun automaticSpotsAvoidHidingUnderObjects() {
+        // Baum genau dort, wo der automatische Punkt sonst läge
+        for (view in ViewMode.entries) {
+            val p0 = Plan.default(1600, 1000).copy(view = view)
+            val y = if (view == ViewMode.SIDE) p0.horizon + (1000f - p0.horizon) * 0.65f else 550f
+            val tree = SceneObject(1, ObjType.TREE, 560f, y - 60f, 300f, 400f)
+            val p = p0.copy(objects = listOf(tree), nextId = 2, steps = listOf(Step(ActionType.SWEEP, seconds = 3f), Step(ActionType.SCARE)))
+            val s = Simulator(p).run()
+            val sweep = s.frames.first { it.anim == Anim.SWEEP }
+            val scare = s.frames.first { it.anim == Anim.SCARE }
+            assertTrue("Fegeort im Baum ($view)", !tree.contains(Pt(sweep.x, sweep.y)))
+            assertTrue("Schreckort im Baum ($view)", !tree.contains(Pt(scare.x, scare.y)))
+        }
+    }
+
+    @Test
     fun directionsFollowMovement() {
         assertEquals(0, headingToDir(0f, 1f))
         assertEquals(2, headingToDir(1f, 0f))
