@@ -72,6 +72,7 @@ class UiTest {
         rule.onNodeWithTag("btn_continue").performClick()
         rule.waitUntil(30_000) { has("btn_preview") }
         rule.waitUntil(60_000) { enabled("btn_preview") }
+        shot("ui_editor_start")
     }
 
     /** Knoten im Bedienfeld: erst hinscrollen, dann antippen. */
@@ -79,6 +80,11 @@ class UiTest {
         val n: SemanticsNodeInteraction = rule.onNodeWithTag(tag)
         n.performScrollTo()
         n.performClick()
+    }
+
+    /** Reiter unten im Editor (nicht scrollbar). */
+    private fun tab(i: Int) {
+        rule.onNodeWithTag("tab_$i").performClick()
     }
 
     /** Wartet, bis der automatisch gespeicherte Plan die Bedingung erfüllt (Speichern läuft 250 ms nach der Änderung). */
@@ -149,7 +155,7 @@ class UiTest {
     @Test
     fun objectsCanBeAddedMovedAndRemoved() {
         openEditor()
-        tap("tab_1")
+        tab(1)
         tap("add_tree")
         tap("add_bed")
         var p = awaitPlan("zwei Gegenstände") { it.objects.size == 2 }
@@ -167,9 +173,9 @@ class UiTest {
     @Test
     fun stepsCanBeBuiltWithHideObjectAndPoint() {
         openEditor()
-        tap("tab_1")
+        tab(1)
         tap("add_bush")
-        tap("tab_2")
+        tab(2)
         tap("add_step_hide")
         tap("step_retreat_object")
         tap("add_step_scare")
@@ -189,7 +195,7 @@ class UiTest {
     @Test
     fun viewModeSwitchesAndHorizonMoves() {
         openEditor()
-        tap("tab_3")
+        tab(3)
         tap("view_top")
         awaitPlan("von oben") { it.view == ViewMode.TOP }
         tap("view_side")
