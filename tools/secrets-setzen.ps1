@@ -20,13 +20,20 @@ $werte = @{}
 foreach ($zeile in Get-Content $pw) {
     if ($zeile -match '^\s*([A-Za-z_]+)\s*=\s*(.+?)\s*$') { $werte[$Matches[1].ToLower()] = $Matches[2] }
 }
+if ($werte.Count -eq 0) {
+    # Datei enthaelt nur das Passwort (eine Zeile): gilt fuer Keystore und Schluessel; der Alias wird im Workflow erkannt.
+    $einzeln = (Get-Content $pw | Where-Object { $_.Trim() } | Select-Object -First 1).Trim()
+    $werte["keystore_password"] = $einzeln
+    $werte["key_password"] = $einzeln
+    $werte["key_alias"] = "release"
+}
 foreach ($k in "keystore_password", "key_alias", "key_password") {
     if (-not $werte.ContainsKey($k)) { throw "In der Passwortdatei fehlt: $k" }
 }
 $b64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($ks))
 
-$b64 | gh secret set ANDROID_KEYSTORE_BASE64 -R $Repo
-$werte["keystore_password"] | gh secret set ANDROID_KEYSTORE_PASSWORD -R $Repo
-$werte["key_alias"] | gh secret set ANDROID_KEY_ALIAS -R $Repo
-$werte["key_password"] | gh secret set ANDROID_KEY_PASSWORD -R $Repo
+gh secret set ANDROID_KEYSTORE_BASE64 -R $Repo --body $b64
+gh secret set ANDROID_KEYSTORE_PASSWORD -R $Repo --body $werte["keystore_password"]
+gh secret set ANDROID_KEY_ALIAS -R $Repo --body $werte["key_alias"]
+gh secret set ANDROID_KEY_PASSWORD -R $Repo --body $werte["key_password"]
 Write-Host "Fertig: vier Secrets in $Repo gesetzt. Danach: Push auf main baut die signierte APK."
