@@ -1,15 +1,17 @@
 package app.wichtelein2
 
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.wichtelein2.core.ActionType
@@ -19,6 +21,7 @@ import app.wichtelein2.core.InteriorKind
 import app.wichtelein2.core.ObjType
 import app.wichtelein2.core.OpenDir
 import app.wichtelein2.core.Plan
+import app.wichtelein2.core.Retreat
 import app.wichtelein2.core.ViewMode
 import app.wichtelein2.data.ProjectStore
 import app.wichtelein2.data.SettingsStore
@@ -31,6 +34,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
+/** Bedienung der App auf dem kleinen Emulator-Bildschirm (320 x 640): alles muss erreichbar sein. */
 @RunWith(AndroidJUnit4::class)
 class UiTest {
     @get:Rule
@@ -54,15 +58,7 @@ class UiTest {
         scenario = ActivityScenario.launch(MainActivity::class.java)
     }
 
-    private fun openEditor() {
-        start()
-        rule.onNodeWithTag("btn_continue").performClick()
-        rule.waitUntil(30_000) { rule.onAllNodesWithTagSafe("btn_preview") }
-        rule.waitUntil(60_000) { enabled("btn_preview") }
-    }
-
-    private fun androidx.compose.ui.test.junit4.ComposeTestRule.onAllNodesWithTagSafe(tag: String): Boolean =
-        onAllNodes(androidx.compose.ui.test.hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty()
+    private fun has(tag: String): Boolean = rule.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty()
 
     private fun enabled(tag: String): Boolean = try {
         rule.onNodeWithTag(tag).assertIsEnabled()
@@ -71,10 +67,30 @@ class UiTest {
         false
     }
 
-    private fun savedPlan(): Plan {
-        // Autospeichern läuft 250 ms nach der Änderung
-        Thread.sleep(700)
-        return ProjectStore(ctx).loadPlan()!!
+    private fun openEditor() {
+        start()
+        rule.onNodeWithTag("btn_continue").performClick()
+        rule.waitUntil(30_000) { has("btn_preview") }
+        rule.waitUntil(60_000) { enabled("btn_preview") }
+    }
+
+    /** Knoten im Bedienfeld: erst hinscrollen, dann antippen. */
+    private fun tap(tag: String) {
+        val n: SemanticsNodeInteraction = rule.onNodeWithTag(tag)
+        n.performScrollTo()
+        n.performClick()
+    }
+
+    /** Wartet, bis der automatisch gespeicherte Plan die Bedingung erfüllt (Speichern läuft 250 ms nach der Änderung). */
+    private fun awaitPlan(what: String, cond: (Plan) -> Boolean): Plan {
+        var last: Plan? = null
+        val end = System.currentTimeMillis() + 8_000
+        while (System.currentTimeMillis() < end) {
+            last = ProjectStore(ctx).loadPlan()
+            if (last != null && cond(last)) return last
+            Thread.sleep(150)
+        }
+        throw AssertionError("Plan erfüllt nicht: $what; zuletzt: $last")
     }
 
     private fun shot(name: String) {
@@ -95,76 +111,77 @@ class UiTest {
     @Test
     fun arrowButtonsMoveRotateAndResizeTheDoor() {
         openEditor()
-        val before = savedPlan().door
-        rule.onNodeWithTag("pad_up").performScrollTo().performClick()
-        rule.onNodeWithTag("pad_left").performScrollTo().performClick()
-        rule.onNodeWithTag("pad_rot_right").performScrollTo().performClick()
-        rule.onNodeWithTag("pad_size_plus").performScrollTo().performClick()
-        rule.onNodeWithTag("pad_w_plus").performScrollTo().performClick()
-        rule.onNodeWithTag("pad_h_minus").performScrollTo().performClick()
-        rule.onNodeWithTag("pad_down").performScrollTo().performClick()
-        rule.onNodeWithTag("pad_right").performScrollTo().performClick()
-        rule.onNodeWithTag("pad_rot_left").performScrollTo().performClick()
+        val before = awaitPlan("Startplan") { true }.door
+        tap("pad_up")
+        awaitPlan("hoch") { it.door.y < before.y - 1f }
+        tap("pad_left")
+        awaitPlan("links") { it.door.x < before.x - 1f }
+        tap("pad_rot_right")
+        awaitPlan("drehen") { it.door.rot > 1f }
+        tap("pad_size_plus")
+        awaitPlan("größer") { it.door.w > before.w * 1.01f && it.door.h > before.h * 1.01f }
+        tap("pad_w_plus")
+        awaitPlan("breiter") { it.door.w > before.w * 1.05f }
+        tap("pad_h_minus")
+        tap("pad_down")
+        tap("pad_right")
+        tap("pad_rot_left")
         shot("ui_editor_door")
-        val up = savedPlan().door
-        // hoch+runter und links+rechts heben sich auf, Drehung auch; Größe bleibt geändert
-        assertEquals(before.x, up.x, 1.5f)
-        assertEquals(before.y, up.y, 1.5f)
-        assertEquals(before.rot, up.rot, 0.01f)
-        assertTrue("Größe + Breite/Höhe geändert", up.w > before.w * 1.02f && up.h != before.h)
+        val after = awaitPlan("zurück") { Math.abs(it.door.rot) < 0.01f && Math.abs(it.door.y - before.y) < 1.5f && Math.abs(it.door.x - before.x) < 1.5f }.door
+        assertTrue("Breite geändert", after.w > before.w * 1.05f)
     }
 
     @Test
     fun doorOptionsAreStored() {
         openEditor()
-        rule.onNodeWithTag("door_shape_round").performScrollTo().performClick()
-        rule.onNodeWithTag("door_hinge_right").performScrollTo().performClick()
-        rule.onNodeWithTag("door_open_in").performScrollTo().performClick()
-        rule.onNodeWithTag("door_interior_black").performScrollTo().performClick()
-        val d = savedPlan().door
+        tap("door_shape_round")
+        tap("door_hinge_right")
+        tap("door_open_in")
+        tap("door_interior_black")
+        val d = awaitPlan("Türoptionen") {
+            it.door.shape == DoorShape.ROUND && it.door.hinge == Hinge.RIGHT && it.door.openDir == OpenDir.IN && it.door.interior == InteriorKind.BLACK
+        }.door
         assertEquals(DoorShape.ROUND, d.shape)
-        assertEquals(Hinge.RIGHT, d.hinge)
-        assertEquals(OpenDir.IN, d.openDir)
-        assertEquals(InteriorKind.BLACK, d.interior)
-        rule.onNodeWithTag("door_interior_hoehle").performScrollTo().performClick()
-        assertEquals(InteriorKind.HOEHLE, savedPlan().door.interior)
+        tap("door_interior_hoehle")
+        awaitPlan("Höhle") { it.door.interior == InteriorKind.HOEHLE }
     }
 
     @Test
     fun objectsCanBeAddedMovedAndRemoved() {
         openEditor()
-        rule.onNodeWithTag("tab_1").performClick()
-        rule.onNodeWithTag("add_tree").performScrollTo().performClick()
-        rule.onNodeWithTag("add_bed").performScrollTo().performClick()
-        var p = savedPlan()
+        tap("tab_1")
+        tap("add_tree")
+        tap("add_bed")
+        var p = awaitPlan("zwei Gegenstände") { it.objects.size == 2 }
         assertEquals(listOf(ObjType.TREE, ObjType.BED), p.objects.map { it.type })
         val bed = p.objects[1]
-        rule.onNodeWithTag("pad_up").performScrollTo().performClick()
-        rule.onNodeWithTag("pad_rot_right").performScrollTo().performClick()
-        p = savedPlan()
-        assertTrue(p.objects[1].y < bed.y)
+        tap("pad_up")
+        tap("pad_rot_right")
+        p = awaitPlan("Bett verschoben und gedreht") { it.objects.size == 2 && it.objects[1].y < bed.y && it.objects[1].rot > 1f }
         assertEquals(3f, p.objects[1].rot, 0.01f)
         shot("ui_editor_objects")
-        rule.onNodeWithTag("obj_delete").performScrollTo().performClick()
-        assertEquals(listOf(ObjType.TREE), savedPlan().objects.map { it.type })
+        tap("obj_delete")
+        awaitPlan("Bett gelöscht") { it.objects.map { o -> o.type } == listOf(ObjType.TREE) }
     }
 
     @Test
     fun stepsCanBeBuiltWithHideObjectAndPoint() {
         openEditor()
-        rule.onNodeWithTag("tab_1").performClick()
-        rule.onNodeWithTag("add_bush").performScrollTo().performClick()
-        rule.onNodeWithTag("tab_2").performClick()
-        rule.onNodeWithTag("add_step_hide").performScrollTo().performClick()
-        rule.onNodeWithTag("step_retreat_object").performScrollTo().performClick()
-        rule.onNodeWithTag("add_step_scare").performScrollTo().performClick()
-        rule.onNodeWithTag("step_retreat_door").performScrollTo().performClick()
-        rule.onNodeWithTag("step_pick_point").performScrollTo().performClick()
+        tap("tab_1")
+        tap("add_bush")
+        tap("tab_2")
+        tap("add_step_hide")
+        tap("step_retreat_object")
+        tap("add_step_scare")
+        tap("step_retreat_door")
+        tap("step_pick_point")
         rule.onNodeWithTag("pick_banner").assertIsDisplayed()
         rule.onNodeWithTag("editor_canvas").performClick()
-        val p = savedPlan()
+        val p = awaitPlan("Schritte") { it.steps.size == 3 && it.steps[2].at != null }
         assertEquals(listOf(ActionType.SWEEP, ActionType.HIDE, ActionType.SCARE), p.steps.map { it.action })
-        assertTrue(p.steps[1].objectId == p.objects[0].id)
+        assertEquals(p.objects[0].id, p.steps[1].objectId)
+        assertEquals(Retreat.OBJECT, p.steps[1].retreat)
+        assertEquals(Retreat.DOOR, p.steps[2].retreat)
         assertNotNull(p.steps[2].at)
         shot("ui_editor_steps")
     }
@@ -172,15 +189,14 @@ class UiTest {
     @Test
     fun viewModeSwitchesAndHorizonMoves() {
         openEditor()
-        rule.onNodeWithTag("tab_3").performClick()
-        rule.onNodeWithTag("view_top").performScrollTo().performClick()
-        assertEquals(ViewMode.TOP, savedPlan().view)
-        rule.onNodeWithTag("view_side").performScrollTo().performClick()
-        assertEquals(ViewMode.SIDE, savedPlan().view)
-        val h0 = savedPlan().horizon
-        rule.onNodeWithTag("select_horizon").performScrollTo().performClick()
-        rule.onNodeWithTag("pad_down").performScrollTo().performClick()
-        assertTrue(savedPlan().horizon > h0)
+        tap("tab_3")
+        tap("view_top")
+        awaitPlan("von oben") { it.view == ViewMode.TOP }
+        tap("view_side")
+        val p = awaitPlan("seitlich") { it.view == ViewMode.SIDE }
+        tap("select_horizon")
+        tap("pad_down")
+        awaitPlan("Horizont tiefer") { it.horizon > p.horizon + 1f }
         shot("ui_editor_view")
     }
 
@@ -188,14 +204,14 @@ class UiTest {
     fun previewPlaysAndExportMakesVideo() {
         openEditor()
         rule.onNodeWithTag("btn_preview").performClick()
-        rule.waitUntil(30_000) { rule.onAllNodesWithTagSafe("preview_canvas") }
-        Thread.sleep(2500)
+        rule.waitUntil(30_000) { has("preview_canvas") }
+        Thread.sleep(1500)
         shot("ui_preview")
         rule.onNodeWithTag("preview_time").assertIsDisplayed()
         rule.onNodeWithTag("preview_close").performClick()
-        rule.waitUntil(10_000) { rule.onAllNodesWithTagSafe("btn_export") }
+        rule.waitUntil(10_000) { has("btn_export") }
         rule.onNodeWithTag("btn_export").performClick()
-        rule.waitUntil(240_000) { rule.onAllNodesWithTagSafe("export_done") || rule.onAllNodesWithTagSafe("export_error") }
+        rule.waitUntil(240_000) { has("export_done") || has("export_error") }
         rule.onNodeWithTag("export_done").assertIsDisplayed()
     }
 
@@ -203,22 +219,24 @@ class UiTest {
     fun settingsThemeColorsAndUpdateDialog() {
         start()
         rule.onNodeWithTag("btn_settings").performClick()
-        rule.onNodeWithTag("theme_2").performClick()
+        tap("theme_2")
         rule.waitUntil(5_000) { SettingsStore(ctx).load().themeMode == 2 }
-        rule.onNodeWithTag("theme_1").performClick()
-        rule.waitUntil(5_000) { SettingsStore(ctx).load().themeMode == 1 }
-        rule.onNodeWithTag("color_hat_6").performScrollTo().performClick()
-        rule.onNodeWithTag("color_pants_2").performScrollTo().performClick()
-        rule.waitUntil(5_000) { SettingsStore(ctx).load().colors.hat != null && SettingsStore(ctx).load().colors.pants != null }
-        Thread.sleep(1500)
-        shot("ui_settings_light")
-        rule.onNodeWithTag("theme_2").performClick()
-        Thread.sleep(800)
+        Thread.sleep(600)
         shot("ui_settings_dark")
-        rule.onNodeWithTag("colors_reset").performScrollTo().performClick()
+        tap("theme_1")
+        rule.waitUntil(5_000) { SettingsStore(ctx).load().themeMode == 1 }
+        tap("color_hat_6")
+        tap("color_pants_2")
+        rule.waitUntil(5_000) { SettingsStore(ctx).load().colors.hat != null && SettingsStore(ctx).load().colors.pants != null }
+        tap("theme_1")
+        Thread.sleep(1200)
+        shot("ui_settings_light")
+        tap("theme_0")
+        rule.waitUntil(5_000) { SettingsStore(ctx).load().themeMode == 0 }
+        tap("colors_reset")
         rule.waitUntil(5_000) { SettingsStore(ctx).load().colors.isOriginal }
-        rule.onNodeWithTag("btn_update").performScrollTo().performClick()
-        rule.waitUntil(15_000) { rule.onAllNodesWithTagSafe("update_dialog") }
+        tap("btn_update")
+        rule.waitUntil(15_000) { has("update_dialog") }
         rule.onNodeWithTag("update_dialog").assertIsDisplayed()
     }
 }

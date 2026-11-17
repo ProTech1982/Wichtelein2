@@ -5,6 +5,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,6 +37,7 @@ import app.wichtelein2.core.Simulation
 import app.wichtelein2.render.Renderer
 import app.wichtelein2.render.SpriteLibrary
 
+@OptIn(ExperimentalLayoutApi::class)
 /** Spielt den berechneten Ablauf live ab (genau die Bilder, die später im Video landen). */
 @Composable
 fun PreviewScreen(
@@ -92,7 +95,7 @@ fun PreviewScreen(
             if (sim.warnings.isNotEmpty()) {
                 Text(sim.warnings.distinct().joinToString("\n"), fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = {
                         if (!playing && t >= sim.duration - 0.01f) t = 0f

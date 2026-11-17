@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -66,14 +68,16 @@ fun EditorScreen(
         ready = true
     }
 
-    Column(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val panelMax = maxHeight * 0.42f
+    Column(Modifier.fillMaxSize().testTag("editor_root")) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             OutlinedButton(onClick = onBack, modifier = Modifier.testTag("editor_back")) { Text("‹") }
-            Text("Wichtelein2", fontSize = 18.sp, modifier = Modifier.weight(1f))
+            Spacer(Modifier.weight(1f))
             Button(onClick = onPreview, enabled = ready, modifier = Modifier.testTag("btn_preview")) { Text("▶ Vorschau") }
             Button(onClick = onExport, enabled = ready, modifier = Modifier.testTag("btn_export")) { Text("Video") }
         }
@@ -110,7 +114,7 @@ fun EditorScreen(
         }
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             listOf("Tür", "Objekte", "Ablauf", "Ansicht").forEachIndexed { i, label ->
                 FilterChip(
@@ -120,13 +124,13 @@ fun EditorScreen(
                         pickIdx = -1
                         sel = if (i == 0) Sel.Door else Sel.None
                     },
-                    label = { Text(label) },
+                    label = { Text(label, fontSize = 12.sp, maxLines = 1) },
                     modifier = Modifier.testTag("tab_$i"),
                 )
             }
         }
         Column(
-            Modifier.fillMaxWidth().heightIn(max = 300.dp).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
+            Modifier.fillMaxWidth().heightIn(max = panelMax).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
         ) {
             when (tab) {
                 0 -> DoorPanel(plan, sel, plan.door.interior == InteriorKind.CUSTOM || customInterior != null, { sel = it }, onPlan, onPickInterior)
@@ -135,5 +139,6 @@ fun EditorScreen(
                 else -> ViewPanel(plan, sel, { sel = it }, onPlan)
             }
         }
+    }
     }
 }
