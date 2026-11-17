@@ -106,7 +106,7 @@ class UiTest {
             Thread.sleep(150)
         }
         val ui = try {
-            rule.onNodeWithTag("editor_root").fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription)
+            rule.onNodeWithTag("editor_root").fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.StateDescription]
         } catch (e: Throwable) {
             "keine Oberfläche: ${e.message}"
         }
