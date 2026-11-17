@@ -97,16 +97,6 @@ class NavGrid(private val plan: Plan) {
         return true
     }
 
-    private fun lineFree(a: Pt, b: Pt): Boolean {
-        val d = a.dist(b)
-        val n = max(1, (d / (cell * 0.5f)).toInt())
-        for (i in 0..n) {
-            val t = i.toFloat() / n
-            if (!isFree(Pt(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t))) return false
-        }
-        return true
-    }
-
     /**
      * Weg von `from` nach `to` als Linienzug (Start und Ziel exakt). Liegt ein Ende im gesperrten Bereich,
      * wird bis zum nächsten freien Punkt gesucht und der Rest geradlinig angehängt.
