@@ -501,7 +501,6 @@ class UiTest {
         tap("help_view")
         rule.waitUntil(5_000) { has("help_view_close") }
         rule.onNodeWithText("Aufsicht", substring = true).assertIsDisplayed()
-        shot("ui_hilfe_ansicht")
         rule.onNodeWithTag("help_view_close").performClick()
         rule.waitUntil(5_000) { !has("help_view_close") }
         // Zu jedem Gegenstand erklärt die App, was er in der gewählten Ansicht bewirkt

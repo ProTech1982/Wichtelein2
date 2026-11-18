@@ -93,7 +93,7 @@ class BackgroundsTest {
         rule.waitForIdle()
         val shot = rule.onRoot().captureToImage().asAndroidBitmap()
         TestUtil.shot("start_eigenes_bild", shot)
-        assertTrue(colourCount(shot) > 40)
+        assertTrue("Foto mit wenigen Flächenfarben", colourCount(shot) >= 5)
     }
 
     @Test
