@@ -22,6 +22,7 @@ import app.wichtelein2.core.ActionType
 import app.wichtelein2.core.DoorShape
 import app.wichtelein2.core.Hinge
 import app.wichtelein2.core.InteriorKind
+import app.wichtelein2.core.Layer
 import app.wichtelein2.core.ObjType
 import app.wichtelein2.core.OpenDir
 import app.wichtelein2.core.Plan
@@ -29,10 +30,12 @@ import app.wichtelein2.core.Retreat
 import app.wichtelein2.core.ViewMode
 import app.wichtelein2.data.ProjectStore
 import app.wichtelein2.data.SettingsStore
+import app.wichtelein2.ui.HomeFx
 import androidx.test.rule.GrantPermissionRule
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -54,6 +57,9 @@ class UiTest {
 
     @Before
     fun prepare() {
+        // Startseite ohne Dauer-Animation und Musik, sonst wartet die Test-Uhr ewig auf Ruhe
+        HomeFx.animate = false
+        HomeFx.music = false
         ctx.getSharedPreferences("wichtelein2", 0).edit().clear().commit()
         ProjectStore(ctx).importBitmap(TestUtil.photo(800, 600))
     }
@@ -61,6 +67,8 @@ class UiTest {
     @After
     fun close() {
         scenario?.close()
+        HomeFx.animate = true
+        HomeFx.music = true
     }
 
     private fun start() {
@@ -135,7 +143,9 @@ class UiTest {
         rule.onNodeWithTag("btn_take_photo").assertIsDisplayed()
         rule.onNodeWithTag("btn_continue").assertIsDisplayed()
         rule.onNodeWithTag("btn_settings").assertIsDisplayed()
-        rule.onNodeWithText("Version 0.2.0").assertIsDisplayed()
+        rule.onNodeWithText("Version 0.3.0").assertIsDisplayed()
+        rule.onNodeWithTag("btn_backgrounds").assertIsDisplayed()
+        rule.onNodeWithTag("btn_home_music").assertIsDisplayed()
         rule.onNodeWithTag("btn_ar").assertIsDisplayed()
         shot("ui_home")
     }
@@ -351,5 +361,167 @@ class UiTest {
         shot("ui_ar")
         rule.onNodeWithTag("ar_back").performClick()
         rule.waitUntil(10_000) { has("btn_ar") }
+    }
+
+    // ------------------------------------------------------------------ Startseite: Hintergrund und Musik
+    @Test
+    fun startPageBackgroundAndMusicCanBeChosen() {
+        start()
+        rule.onNodeWithTag("btn_backgrounds").performClick()
+        rule.waitUntil(15_000) { has("bg_picker") }
+        for (id in listOf("kamin", "sessel", "baum", "dorf")) assertTrue("Vorschaubild $id", has("bg_thumb_$id"))
+        rule.onNodeWithTag("bg_thumb_sessel").performScrollTo().performClick()
+        rule.waitUntil(5_000) { SettingsStore(ctx).load().bgId == "sessel" }
+        // Musik zum Bild wählen: Melodie, dann aus
+        rule.onNodeWithTag("bg_music_t3").performScrollTo().performClick()
+        rule.waitUntil(5_000) { SettingsStore(ctx).load().bgMusic["sessel"] == "t3" }
+        rule.onNodeWithTag("bg_music_off").performScrollTo().performClick()
+        rule.waitUntil(5_000) { SettingsStore(ctx).load().bgMusic["sessel"] == "off" }
+        // das nächste Bild hat seine eigene Musikwahl
+        rule.onNodeWithTag("bg_thumb_kamin").performScrollTo().performClick()
+        rule.waitUntil(5_000) { SettingsStore(ctx).load().bgId == "kamin" }
+        assertNull("Kamin behält seine Standard-Melodie", SettingsStore(ctx).load().bgMusic["kamin"])
+        rule.onNodeWithTag("bg_volume").performScrollTo()
+        rule.onNodeWithTag("bg_volume").performSemanticsAction(SemanticsActions.SetProgress) { it(0.15f) }
+        rule.waitUntil(5_000) { SettingsStore(ctx).load().bgVolume < 0.3f }
+        rule.onNodeWithTag("bg_close").performScrollTo().performClick()
+        rule.waitUntil(5_000) { !has("bg_picker") }
+        rule.onNodeWithTag("btn_home_music").performClick()
+        rule.waitUntil(5_000) { !SettingsStore(ctx).load().homeMusic }
+        shot("ui_home_hintergrund")
+    }
+
+    // ------------------------------------------------------------------ Editor: gesperrt, Schritte, Leiter/Treppe, Hilfe
+    @Test
+    fun onlyTheSelectedObjectMovesWhenDraggingOverlappingObjects() {
+        openEditor()
+        tab(1)
+        tap("add_tree")
+        tap("add_bed")
+        var p = awaitPlan("zwei Gegenstände") { it.objects.size == 2 }
+        val tree = p.objects[0]
+        val bed = p.objects[1]
+        // Beide liegen übereinander. Baum wählen und ziehen: nur der Baum darf wandern, nicht das (oben liegende) Bett
+        rule.onNodeWithTag("obj_chip_${tree.id}").performScrollTo().performClick()
+        val node = rule.onNodeWithTag("editor_canvas")
+        val k = node.fetchSemanticsNode().size.width.toFloat() / 800f
+        val grab = androidx.compose.ui.geometry.Offset(tree.x * k, tree.y * k)
+        node.performTouchInput {
+            down(grab)
+            moveTo(grab + androidx.compose.ui.geometry.Offset(30f, 0f))
+            moveTo(grab + androidx.compose.ui.geometry.Offset(70f, 8f))
+            moveTo(grab + androidx.compose.ui.geometry.Offset(110f, 12f))
+            up()
+        }
+        p = awaitPlan("Baum verschoben") { it.objects[0].x > tree.x + 40f }
+        assertEquals("Bett bleibt stehen", bed.x, p.objects[1].x, 0.01f)
+        assertEquals("Bett bleibt stehen", bed.y, p.objects[1].y, 0.01f)
+    }
+
+    @Test
+    fun draggingOutsideTheActiveTabMovesNothing() {
+        openEditor()
+        val before = awaitPlan("Startplan") { true }
+        tab(1)   // Reiter Objekte: die Tür ist gesperrt
+        val node = rule.onNodeWithTag("editor_canvas")
+        val k = node.fetchSemanticsNode().size.width.toFloat() / 800f
+        val grab = androidx.compose.ui.geometry.Offset(before.door.x * k, (before.door.y - before.door.h / 2f) * k)
+        node.performTouchInput {
+            down(grab)
+            moveTo(grab + androidx.compose.ui.geometry.Offset(-30f, 0f))
+            moveTo(grab + androidx.compose.ui.geometry.Offset(-90f, 5f))
+            up()
+        }
+        Thread.sleep(700)
+        rule.mainClock.advanceTimeBy(400)
+        val after = awaitPlan("Plan unverändert") { true }
+        assertEquals(before.door.x, after.door.x, 0.01f)
+        assertEquals(before.door.y, after.door.y, 0.01f)
+    }
+
+    @Test
+    fun clickingAStepChipEditsExactlyThatStep() {
+        openEditor()
+        tab(2)
+        tap("add_step_scare")
+        tap("add_step_hide")
+        // Schritt 1 (Fegen) und Schritt 2 (Erschrecken) bekommen je einen Ort
+        tap("step_chip_0")
+        tap("step_pick_point")
+        rule.onNodeWithTag("editor_canvas").performClick()
+        tap("step_chip_1")
+        tap("step_pick_point")
+        rule.onNodeWithTag("editor_canvas").performClick()
+        val p0 = awaitPlan("zwei Orte") { it.steps.size == 3 && it.steps[0].at != null && it.steps[1].at != null }
+        // Nun den ersten Schritt unten anklicken und mit den Pfeilen schieben: nur der erste darf wandern
+        tap("step_chip_2")
+        tap("step_chip_0")
+        tap("pad_up")
+        tap("pad_up")
+        val p1 = awaitPlan("erster Schritt höher") { it.steps[0].at!!.y < p0.steps[0].at!!.y - 1f }
+        assertEquals(p0.steps[1].at!!.y, p1.steps[1].at!!.y, 0.01f)
+        assertEquals(p0.steps[1].at!!.x, p1.steps[1].at!!.x, 0.01f)
+        assertEquals(p0.steps[0].at!!.x, p1.steps[0].at!!.x, 0.01f)
+    }
+
+    @Test
+    fun ladderAndStairsStepsHaveDirectionAndPath() {
+        openEditor()
+        tab(1)
+        tap("add_ladder")
+        tap("add_stairs")
+        val p0 = awaitPlan("Leiter und Treppe") { it.objects.size == 2 }
+        tab(2)
+        tap("add_step_ladder")
+        tap("add_step_stairs")
+        var p = awaitPlan("zwei Schritte") { it.steps.size == 3 }
+        assertEquals(ActionType.LADDER, p.steps[1].action)
+        assertEquals(ActionType.STAIRS, p.steps[2].action)
+        assertEquals(p0.objects[0].id, p.steps[1].objectId)
+        assertEquals(p0.objects[1].id, p.steps[2].objectId)
+        // Treppe: hinunter wählen und das obere Ende des Pfads mit den Pfeilen versetzen
+        tap("step_dir_down")
+        tap("step_path_top")
+        tap("pad_right")
+        tap("pad_right")
+        p = awaitPlan("Treppe hinunter mit eigenem Pfad") { !it.steps[2].up && it.steps[2].to != null }
+        assertTrue("Leiter bleibt hinauf", p.steps[1].up)
+        assertNotNull(p.steps[2].to)
+        assertEquals(null, p.steps[2].at)
+        // Wieder automatisch
+        tap("step_auto_path")
+        awaitPlan("Pfad automatisch") { it.steps[2].to == null && it.steps[2].at == null }
+        shot("ui_editor_treppe")
+    }
+
+    @Test
+    fun helpDialogExplainsTheTopViewOption() {
+        openEditor()
+        tab(3)
+        tap("help_view")
+        rule.waitUntil(5_000) { has("help_view_close") }
+        rule.onNodeWithText("Aufsicht", substring = true).assertIsDisplayed()
+        shot("ui_hilfe_ansicht")
+        rule.onNodeWithTag("help_view_close").performClick()
+        rule.waitUntil(5_000) { !has("help_view_close") }
+        // Zu jedem Gegenstand erklärt die App, was er in der gewählten Ansicht bewirkt
+        tab(1)
+        tap("add_house")
+        rule.onNodeWithTag("obj_info").performScrollTo().assertIsDisplayed()
+        tab(3)
+        tap("view_top")
+        tab(1)
+        tap("obj_chip_${awaitPlan("Haus") { it.objects.size == 1 }.objects[0].id}")
+        rule.onNodeWithTag("obj_info").performScrollTo()
+        rule.onNodeWithText("Von oben:", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun wichtelPreviewIsOptionalInDoorTab() {
+        openEditor()
+        rule.onNodeWithTag("toggle_wichtel").assertIsDisplayed()
+        rule.onNodeWithTag("toggle_wichtel").performClick()
+        shot("ui_editor_wichtel_an")
+        assertEquals(Layer.DOOR, Layer.ofTab(0))
     }
 }

@@ -3,6 +3,18 @@
 Auftrag: Wichtelein2 als komplett neues Projekt (Version 0.1.0), 3D-Wichtel + Besen aus Blender, Tür, Wegfindung, 3 Aktionen,
 Farben, Design, Update. Details siehe README.md.
 
+## Version 0.3.0 (Arbeitsstand, noch nicht gebaut/gepusht)
+- Tür: Wichtel geht beim Hineingehen zur Stelle vor der Tür, dann in die Türöffnung (Spiegelbild zum Herauskommen); Tür öffnet/schließt je Durchgang genau einmal
+  (Test `everyDoorPassOpensOnceAndWichtelOnlyCrossesWhileOpen`). Einen doppelten Zyklus ließ die alte Simulation nicht erkennen; geändert wurde das Verschwinden auf der Stelle (Pop beim Ebenenwechsel).
+- Leiter/Treppe: `ActionType.LADDER/STAIRS`, `Step.to/up`, `ObjType.STAIRS`, neue Bewegungen `climb`/`stairs` (Blender, `wichtel_poses.py`), `Sel.StepTo`,
+  `EditOps.climbPath/autoClimbPath/stepPoints`, Simulator `doClimb/climbAlong/descend` (`Elev`), `Frame.refY/ignore` (feste Größe, keine Verdeckung durch die Leiter).
+- Editor: `Layer` (nur die Ebene des Reiters aktiv, Rest gesperrt/blass), Ziehen nur der Auswahl (`hitsSelection`), Schritt-Auswahl folgt dem angeklickten Schritt, Schalter „Wichtel“,
+  `Help.kt` (Hilfe-Fenster, Erklärung je Gegenstand/Ansicht).
+- Startseite: `core/Backgrounds.kt`, `data/BackgroundStore`, `audio/BackgroundMusic`, `ui/HomeBackdrop` (Schnee, Leuchten, Funkeln), `ui/BackgroundPicker`; 9 Bilder aus `tools/make_backgrounds.py`.
+- Prüfung lokal: 82 JVM-Tests des Kerns grün (kotlinc 2.0.21 + JUnit, ohne Gradle). **Nicht** lokal übersetzt/gelaufen: Compose-Oberfläche (Panels, EditorScreen/Canvas, HomeScreen, Picker, Backdrop),
+  Emulator-Tests (`BackgroundsTest`, neue `UiTest`/`RenderTest`-Fälle) -> erst die CI zeigt, ob alles baut und besteht.
+- Nicht prüfbar ohne echtes Handy: Wiedergabe eigener Musikdateien (MediaPlayer), Dateiauswahl für eigenes Bild/Musik (System-Dialog).
+
 ## Version 0.2.0 (Zweig v0.2.0-entwicklung)
 - Ton: `core/Sound.kt` (Fx, SoundSynth, MusicSynth, SoundPlan aus den Simulator-Bildern, Mixdown), `audio/AudioPlayer.kt` (Abspielen), `audio/AudioMux.kt`
   (Tonspur als AAC in das fertige Video), Einstellungen (6 Geräusch-Gruppen einzeln an/aus: Besen, Pfeifen, Glocken, Erschrecken, Tür, Tip-Tap; Musik 0-4; Lautstärken), Ton-Schalter in der Vorschau. Kein Sprechen.
@@ -32,4 +44,4 @@ Farben, Design, Update. Details siehe README.md.
 ## Offen
 - Release-APK: Secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` im Repo setzen (`tools/secrets-setzen.ps1`), dann `gh workflow run android.yml`.
 - Vereinfachungen: vorgerenderte Sprites (8 Richtungen, 2 Kamerawinkel) statt Echtzeit-3D; Verdeckung durch markierte Ovale/Rechtecke (keine Objekterkennung);
-  Tür-Angeln/Aufschlag stellt der Nutzer ein (keine Erkennung im Foto); Hände am Besen per Mini-IK (bei starkem Schwung bis ca. 10 cm daneben); Leiter nur Hindernis.
+  Tür-Angeln/Aufschlag stellt der Nutzer ein (keine Erkennung im Foto); Hände am Besen per Mini-IK (bei starkem Schwung bis ca. 10 cm daneben); Leiter/Treppe: vorgerenderte Bewegungen (kein echtes Greifen an den Sprossen), Pfad per Punkten statt Erkennung im Foto.

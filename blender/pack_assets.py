@@ -14,6 +14,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import wichtel_poses as P  # reine Python-Datei, kein bpy
 
 src, main = sys.argv[1:3]
+# --only climb,stairs: nur diese Bewegungen packen und in sprites.json ergaenzen (Rest bleibt unveraendert)
+ONLY = sys.argv[sys.argv.index("--only") + 1].split(",") if "--only" in sys.argv else None
 assets = os.path.join(main, "assets")
 res = os.path.join(main, "res")
 CELL = 224
@@ -36,6 +38,8 @@ def pack_sprites():
     for view in ("side", "top"):
         os.makedirs(os.path.join(out, view), exist_ok=True)
         for anim, n in P.ANIMS.items():
+            if ONLY is not None and anim not in ONLY:
+                continue
             sheet = Image.new("RGBA", (CELL * n, CELL * DIRS), (0, 0, 0, 0))
             msheet = Image.new("RGBA", (CELL * n, CELL * DIRS), (0, 0, 0, 0))
             for f in range(n):
@@ -67,6 +71,13 @@ def pack_sprites():
             sheet.save(p1, "WEBP", quality=86, method=6, alpha_quality=100)
             msheet.save(p2, "WEBP", lossless=True, quality=100, method=6, exact=True)
             total += os.path.getsize(p1) + os.path.getsize(p2)
+    if ONLY is not None:
+        mp = os.path.join(out, "sprites.json")
+        meta = json.load(open(mp))
+        meta["anims"] = P.ANIMS
+        json.dump(meta, open(mp, "w"), indent=1)
+        print("Sprites (nur %s):" % ",".join(ONLY), round(total / 1e6, 1), "MB")
+        return
     ref = {k: round(v[0] / max(1, v[1]), 4) for k, v in ref_sum.items()}
     meta = {
         "cell": CELL, "feet": [round(FEET[0], 1), round(FEET[1], 1)], "pxPerMeter": round(PX_PER_M, 3),
@@ -129,6 +140,7 @@ def pack_icon():
 
 
 pack_sprites()
-pack_doors()
-pack_interiors()
-pack_icon()
+if ONLY is None:
+    pack_doors()
+    pack_interiors()
+    pack_icon()

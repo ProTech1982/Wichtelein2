@@ -378,11 +378,11 @@ object SoundPlan {
             val changed = b.anim != a.anim || b.frame != a.frame
             if (!changed) continue
             when (b.anim) {
-                Anim.WALK, Anim.SNEAK, Anim.RUN -> if (b.frame % 4 == 0) {
-                    val g = when (b.anim) { Anim.SNEAK -> 0.4f; Anim.RUN -> 1f; else -> 0.7f }
+                Anim.WALK, Anim.SNEAK, Anim.RUN, Anim.STAIRS, Anim.CLIMB -> if (b.frame % 4 == 0) {
+                    val g = when (b.anim) { Anim.SNEAK -> 0.4f; Anim.CLIMB -> 0.45f; Anim.RUN -> 1f; else -> 0.7f }
                     out.add(SoundEvent(ms, Fx.STEP, g))
                     steps++
-                    if (b.anim != Anim.SNEAK && steps % 5 == 0) out.add(SoundEvent(ms + 20, Fx.TINKLE, 0.6f))
+                    if (b.anim != Anim.SNEAK && b.anim != Anim.CLIMB && steps % 5 == 0) out.add(SoundEvent(ms + 20, Fx.TINKLE, 0.6f))
                 }
                 Anim.SWEEP -> if (b.frame % 4 == 0) out.add(SoundEvent(ms, Fx.SWEEP, 0.7f))
                 Anim.SCARE -> if (a.anim != Anim.SCARE) {

@@ -193,4 +193,40 @@ class RenderTest {
         assertTrue(!r.occludes(house, app.wichtelein2.core.Pt(600f, 300f)))
         assertTrue(!r.occludes(tree, app.wichtelein2.core.Pt(700f, 500f)))
     }
+
+    @Test
+    fun climbingAnimationsExistAndTheClimbedObjectDoesNotCoverTheWichtel() {
+        val s = SpriteLibrary(ctx)
+        val photo = TestUtil.photo()
+        val tree = app.wichtelein2.core.SceneObject(7, app.wichtelein2.core.ObjType.TREE, 300f, 400f, 240f, 300f)
+        val plan = Plan.default(photo.width, photo.height).copy(objects = listOf(tree), nextId = 8)
+        val base = render(plan, photo, s, null)
+        val x = 300f
+        val y = 480f          // Fuß liegt über der Unterkante des Gegenstands (y < 550) und mitten darin: er steht „dahinter“
+        val h = Scaler(plan).heightAt(y)
+        val covered = render(plan, photo, s, Frame(0f, x, y, 4, Anim.CLIMB, 3, 0f, 0f, 0))
+        val free = render(plan, photo, s, Frame(0f, x, y, 4, Anim.CLIMB, 3, 0f, 0f, 0, ignore = 7))
+        val region = intArrayOf((x - h / 2).toInt(), (y - h).toInt(), (x + h / 2).toInt(), (y + 4).toInt())
+        val c = TestUtil.diffPixels(base, covered, region[0], region[1], region[2], region[3])
+        val f = TestUtil.diffPixels(base, free, region[0], region[1], region[2], region[3])
+        assertTrue("ohne ignore verdeckt der Gegenstand ($c), mit ignore sieht man den Wichtel ($f)", f > c + 800)
+        TestUtil.shot("render_klettern", free)
+    }
+
+    @Test
+    fun fixedScaleReferenceKeepsTheClimberTheSameSize() {
+        val s = SpriteLibrary(ctx)
+        val photo = TestUtil.photo()
+        val plan = Plan.default(photo.width, photo.height)
+        val base = render(plan, photo, s, null)
+        val x = 300f
+        val high = 300f      // weit oben im Foto (nahe Horizont): normal deutlich kleiner
+        val natural = render(plan, photo, s, Frame(0f, x, high, 4, Anim.STAIRS, 2, 0f, 0f, 0))
+        val locked = render(plan, photo, s, Frame(0f, x, high, 4, Anim.STAIRS, 2, 0f, 0f, 0, refY = 480f))
+        val hLocked = Scaler(plan).heightAt(480f)
+        val box = intArrayOf((x - hLocked / 2).toInt(), (high - hLocked).toInt().coerceAtLeast(0), (x + hLocked / 2).toInt(), (high + 4).toInt())
+        val n = TestUtil.diffPixels(base, natural, box[0], box[1], box[2], box[3])
+        val l = TestUtil.diffPixels(base, locked, box[0], box[1], box[2], box[3])
+        assertTrue("mit fester Größe füllt er mehr Fläche ($l) als mit Tiefenverkleinerung ($n)", l > n + 600)
+    }
 }

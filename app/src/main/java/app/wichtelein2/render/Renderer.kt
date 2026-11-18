@@ -50,7 +50,7 @@ class Renderer(
         drawDoorBack(canvas, f, houseT)
         drawDoorFront(canvas, open)
         if (f != null && houseT <= 0.5f) {
-            drawWichtel(canvas, f.x, f.y, f.dir, f.anim, f.frame, houseT)
+            drawWichtel(canvas, f.x, f.y, f.dir, f.anim, f.frame, houseT, refY = f.refY)
         }
         if (f != null && houseT <= 0.5f) drawOccluders(canvas, f)
     }
@@ -93,7 +93,7 @@ class Renderer(
         val bmp = interiorBitmap()
         if (bmp != null) canvas.drawBitmap(bmp, null, inner, paint) else canvas.drawRect(inner, black)
         canvas.restore()
-        if (f != null && houseT > 0.5f) drawWichtel(canvas, f.x, f.y, f.dir, f.anim, f.frame, houseT)
+        if (f != null && houseT > 0.5f) drawWichtel(canvas, f.x, f.y, f.dir, f.anim, f.frame, houseT, refY = f.refY)
         canvas.save()
         canvas.concat(doorMatrix)
         canvas.drawBitmap(sprites.doorHole(d.shape), 0f, 0f, dstIn)
@@ -124,8 +124,8 @@ class Renderer(
     }
 
     /** Zeichnet den Wichtel mit den Füßen bei (x, y); houseT blendet ihn beim Betreten der Tür aus. */
-    fun drawWichtel(canvas: Canvas, x: Float, y: Float, dir: Int, anim: Anim, frame: Int, houseT: Float, scaleExtra: Float = 1f) {
-        drawWichtelPx(canvas, plan.view, x, y, scaler.heightAt(y) * scaleExtra, dir, anim, frame, houseT)
+    fun drawWichtel(canvas: Canvas, x: Float, y: Float, dir: Int, anim: Anim, frame: Int, houseT: Float, scaleExtra: Float = 1f, refY: Float = y) {
+        drawWichtelPx(canvas, plan.view, x, y, scaler.heightAt(refY) * scaleExtra, dir, anim, frame, houseT)
     }
 
     /**
@@ -175,7 +175,7 @@ class Renderer(
     private fun drawOccluders(canvas: Canvas, f: Frame) {
         val foot = Pt(f.x, f.y)
         for (o in plan.objects) {
-            if (!occludes(o, foot)) continue
+            if (o.id == f.ignore || !occludes(o, foot)) continue   // die Leiter/Treppe, auf der er steht, deckt ihn nicht zu
             val m = Matrix()
             m.postRotate(o.rot)
             m.postTranslate(o.x, o.y)

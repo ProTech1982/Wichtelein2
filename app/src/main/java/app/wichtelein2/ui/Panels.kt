@@ -140,7 +140,20 @@ private fun selLabel(plan: Plan, sel: Sel): String = when (sel) {
     Sel.Door -> "Ausgewählt: Tür"
     Sel.Horizon -> "Ausgewählt: Horizont"
     is Sel.Obj -> "Ausgewählt: " + (plan.objectById(sel.id)?.type?.label ?: "Gegenstand")
-    is Sel.StepAt -> "Ausgewählt: Ort von Schritt ${sel.index + 1}"
+    is Sel.StepAt -> {
+        val a = plan.steps.getOrNull(sel.index)?.action
+        if (a != null && a.isClimb) "Ausgewählt: Pfad unten von Schritt ${sel.index + 1}" else "Ausgewählt: Ort von Schritt ${sel.index + 1}"
+    }
+    is Sel.StepTo -> "Ausgewählt: Pfad oben von Schritt ${sel.index + 1}"
+}
+
+/** Kopfzeile eines Bereichs: Auswahl-Text und Hilfe-Knopf. */
+@Composable
+private fun PanelHeader(plan: Plan, sel: Sel, title: String, help: String, tag: String) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(selLabel(plan, sel), fontSize = 12.sp, modifier = Modifier.weight(1f).testTag("sel_label"))
+        HelpButton(title, help, tag)
+    }
 }
 
 // ---------------------------------------------------------------------------------------- Tür
@@ -149,7 +162,7 @@ private fun selLabel(plan: Plan, sel: Sel): String = when (sel) {
 fun DoorPanel(plan: Plan, sel: Sel, hasCustomInterior: Boolean, onSel: (Sel) -> Unit, onPlan: (Plan) -> Unit, onPickInterior: () -> Unit) {
     val d = plan.door
     Column(Modifier.fillMaxWidth()) {
-        Text(selLabel(plan, sel), fontSize = 12.sp, modifier = Modifier.testTag("sel_label"))
+        PanelHeader(plan, sel, HelpTexts.DOOR_TITLE, HelpTexts.DOOR, "help_door")
         OutlinedButton(onClick = { onSel(Sel.Door) }, modifier = Modifier.testTag("select_door")) { Text("Tür auswählen") }
         PlacePad(plan, sel, onPlan)
         Text("Form", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
@@ -209,14 +222,14 @@ fun ObjectsPanel(plan: Plan, sel: Sel, onSel: (Sel) -> Unit, onPlan: (Plan) -> U
             }
         }
         if (plan.objects.isNotEmpty()) {
-            Text("Markiert", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            Text("Markiert (zum Bearbeiten antippen, der Rest ist gesperrt)", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 plan.objects.forEachIndexed { i, o ->
                     FilterChip(sel == Sel.Obj(o.id), { onSel(Sel.Obj(o.id)) }, { Text("${o.type.label} ${i + 1}") }, modifier = Modifier.testTag("obj_chip_${o.id}"))
                 }
             }
         }
-        Text(selLabel(plan, sel), fontSize = 12.sp, modifier = Modifier.testTag("sel_label"))
+        PanelHeader(plan, sel, HelpTexts.OBJECTS_TITLE, HelpTexts.OBJECTS, "help_objects")
         val s = sel
         if (s is Sel.Obj) {
             val o = plan.objectById(s.id)
@@ -227,10 +240,7 @@ fun ObjectsPanel(plan: Plan, sel: Sel, onSel: (Sel) -> Unit, onPlan: (Plan) -> U
                     }
                     OutlinedButton(onClick = { onPlan(EditOps.removeObject(plan, o.id)); onSel(Sel.None) }, modifier = Modifier.testTag("obj_delete")) { Text("Löschen") }
                 }
-                Text(
-                    "Rot gestrichelt: Standfläche, die der Wichtel nicht betritt. Das Oval/Rechteck deckt den Wichtel zu, wenn er dahinter ist.",
-                    fontSize = 11.sp,
-                )
+                Text(HelpTexts.objectInfo(o.type, plan.view), fontSize = 11.sp, modifier = Modifier.testTag("obj_info"))
             }
         }
         PlacePad(plan, sel, onPlan)
@@ -247,28 +257,55 @@ fun StepsPanel(
     sel: Sel,
     onSel: (Sel) -> Unit,
     onPlan: (Plan) -> Unit,
-    onPickPoint: (Int) -> Unit,
+    onPickPoint: (Int, Boolean) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth()) {
+        PanelHeader(plan, sel, HelpTexts.STEPS_TITLE, HelpTexts.STEPS, "help_steps")
         Text("Ablauf: Der Wichtel kommt aus der Tür, macht die Schritte der Reihe nach und geht wieder hinein.", fontSize = 12.sp)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            plan.steps.forEachIndexed { i, st ->
-                FilterChip(stepIdx == i, { onStepIdx(i) }, { Text("${i + 1} ${st.action.label}") }, modifier = Modifier.testTag("step_chip_$i"))
-            }
-        }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ActionType.entries.forEach { a ->
-                OutlinedButton(onClick = { onPlan(EditOps.addStep(plan, a)); onStepIdx(plan.steps.size) }, modifier = Modifier.testTag("add_step_${a.key}")) {
-                    Text("+ ${a.label}")
-                }
-            }
-        }
         val i = stepIdx.coerceIn(0, plan.steps.size - 1)
         val st = plan.steps[i]
-        Text("Schritt ${i + 1}", fontWeight = FontWeight.SemiBold)
+        // Wer einen Schritt unten anklickt, bearbeitet genau diesen: Auswahl im Foto und Pfeile folgen mit
+        fun chooseStep(k: Int) {
+            onStepIdx(k)
+            val (a, _) = EditOps.stepPoints(plan, plan.steps[k])
+            onSel(if (a != null) Sel.StepAt(k) else Sel.None)
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            plan.steps.forEachIndexed { k, s ->
+                FilterChip(i == k, { chooseStep(k) }, { Text("${k + 1} ${s.action.label}") }, modifier = Modifier.testTag("step_chip_$k"))
+            }
+        }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             ActionType.entries.forEach { a ->
-                FilterChip(st.action == a, { onPlan(EditOps.updateStep(plan, i) { it.copy(action = a) }) }, { Text(a.label) }, modifier = Modifier.testTag("step_action_${a.key}"))
+                OutlinedButton(
+                    onClick = {
+                        val q = EditOps.addStep(plan, a)
+                        onPlan(q)
+                        onStepIdx(q.steps.size - 1)
+                        onSel(Sel.None)
+                    },
+                    modifier = Modifier.testTag("add_step_${a.key}"),
+                ) { Text("+ ${a.label}") }
+            }
+        }
+        Text("Schritt ${i + 1} von ${plan.steps.size}", fontWeight = FontWeight.SemiBold)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ActionType.entries.forEach { a ->
+                FilterChip(
+                    st.action == a,
+                    {
+                        onPlan(EditOps.updateStep(plan, i) {
+                            val t = it.copy(action = a)
+                            // Gegenstand und Pfad gehören zur Aktion: beim Wechsel zwischen Leiter/Treppe/anderem zurücksetzen
+                            if (a.isClimb != it.action.isClimb || (a.isClimb && a != it.action)) {
+                                t.copy(at = null, to = null, objectId = plan.objects.firstOrNull { o -> a.isClimb && o.type == a.climbType }?.id ?: -1)
+                            } else t
+                        })
+                        onSel(Sel.None)
+                    },
+                    { Text(a.label) },
+                    modifier = Modifier.testTag("step_action_${a.key}"),
+                )
             }
         }
         if (st.action == ActionType.HIDE || st.action == ActionType.SCARE) {
@@ -294,27 +331,76 @@ fun StepsPanel(
         if (st.action == ActionType.SWEEP || st.action == ActionType.SCARE) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(if (st.action == ActionType.SWEEP) "Fegeort:" else "Ort des Schrecks:", fontSize = 13.sp)
-                OutlinedButton(onClick = { onPickPoint(i) }, modifier = Modifier.testTag("step_pick_point")) {
+                OutlinedButton(onClick = { onPickPoint(i, false) }, modifier = Modifier.testTag("step_pick_point")) {
                     Text(if (st.at == null) "Im Foto wählen" else "Neu wählen")
                 }
                 if (st.at != null) {
                     OutlinedButton(onClick = { onSel(Sel.StepAt(i)) }, modifier = Modifier.testTag("step_select_point")) { Text("Verschieben") }
-                    OutlinedButton(onClick = { onPlan(EditOps.updateStep(plan, i) { it.copy(at = null) }) }, modifier = Modifier.testTag("step_auto_point")) { Text("Automatisch") }
+                    OutlinedButton(onClick = { onPlan(EditOps.updateStep(plan, i) { it.copy(at = null) }); onSel(Sel.None) }, modifier = Modifier.testTag("step_auto_point")) { Text("Automatisch") }
                 }
             }
         }
-        if (st.action == ActionType.SWEEP || (st.action != ActionType.SWEEP && st.retreat == Retreat.OBJECT)) {
+        if (st.action.isClimb) {
+            val what = st.action.label
+            Text("Richtung", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilterChip(st.up, { onPlan(EditOps.updateStep(plan, i) { it.copy(up = true) }) }, { Text("▲ Hinauf (unten → oben)") }, modifier = Modifier.testTag("step_dir_up"))
+                FilterChip(!st.up, { onPlan(EditOps.updateStep(plan, i) { it.copy(up = false) }) }, { Text("▼ Hinunter (oben → unten)") }, modifier = Modifier.testTag("step_dir_down"))
+            }
+            val cands = plan.objects.filter { it.type == st.action.climbType }
+            if (cands.isEmpty()) {
+                Text("Noch keine $what markiert – im Tab „Objekte“ „+ $what“ anlegen oder den Pfad im Foto selbst setzen.", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+            } else {
+                Text("$what im Foto:", fontSize = 13.sp)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    cands.forEach { o ->
+                        FilterChip(
+                            EditOps.climbObject(plan, st)?.id == o.id,
+                            { onPlan(EditOps.updateStep(plan, i) { it.copy(objectId = o.id, at = null, to = null) }); onSel(Sel.None) },
+                            { Text("${o.type.label} ${plan.objects.indexOf(o) + 1}") },
+                            modifier = Modifier.testTag("step_obj_${o.id}"),
+                        )
+                    }
+                }
+            }
+            Text("Pfad (unten → oben; sonst automatisch am Gegenstand)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedButton(onClick = { onSel(Sel.StepAt(i)) }, modifier = Modifier.testTag("step_path_bottom")) { Text("Unten verschieben") }
+                OutlinedButton(onClick = { onSel(Sel.StepTo(i)) }, modifier = Modifier.testTag("step_path_top")) { Text("Oben verschieben") }
+                OutlinedButton(onClick = { onPickPoint(i, false) }, modifier = Modifier.testTag("step_pick_bottom")) { Text("Unten im Foto wählen") }
+                OutlinedButton(onClick = { onPickPoint(i, true) }, modifier = Modifier.testTag("step_pick_top")) { Text("Oben im Foto wählen") }
+                if (st.at != null || st.to != null) {
+                    OutlinedButton(onClick = { onPlan(EditOps.updateStep(plan, i) { it.copy(at = null, to = null) }); onSel(Sel.None) }, modifier = Modifier.testTag("step_auto_path")) { Text("Pfad automatisch") }
+                }
+            }
+            Text(
+                if (st.action == ActionType.STAIRS) {
+                    "Die Treppe wird seitlich schräg gegangen (hohe Knie), nicht geklettert. Bei „Hinunter“ steigt er erst hinauf, falls er noch unten steht."
+                } else {
+                    "Die Leiter wird senkrecht geklettert (Blick zur Leiter). Bei „Hinunter“ steigt er erst hinauf, falls er noch unten steht."
+                },
+                fontSize = 11.sp,
+            )
+        }
+        if (st.action == ActionType.SWEEP || st.action.isClimb || (st.action != ActionType.SWEEP && st.retreat == Retreat.OBJECT)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(if (st.action == ActionType.SWEEP) "Dauer: ${st.seconds.toInt()} s" else "Versteckt: ${st.seconds.toInt()} s", fontSize = 13.sp, modifier = Modifier.testTag("step_seconds"))
+                val label = when {
+                    st.action == ActionType.SWEEP -> "Dauer"
+                    st.action.isClimb -> "Oben bleiben"
+                    else -> "Versteckt"
+                }
+                Text("$label: ${st.seconds.toInt()} s", fontSize = 13.sp, modifier = Modifier.testTag("step_seconds"))
                 PadButton("−", "step_sec_minus") { onPlan(EditOps.updateStep(plan, i) { it.copy(seconds = (it.seconds - 1f).coerceAtLeast(1f)) }) }
                 PadButton("+", "step_sec_plus") { onPlan(EditOps.updateStep(plan, i) { it.copy(seconds = (it.seconds + 1f).coerceAtMost(60f)) }) }
             }
         }
-        if (sel is Sel.StepAt) PlacePad(plan, sel, onPlan)
+        // Pfeile nur für den gerade gewählten Schritt (nie für einen anderen)
+        val sl = sel
+        if ((sl is Sel.StepAt && sl.index == i) || (sl is Sel.StepTo && sl.index == i)) PlacePad(plan, sel, onPlan)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedButton(onClick = { onPlan(EditOps.moveStep(plan, i, -1)); if (i > 0) onStepIdx(i - 1) }, modifier = Modifier.testTag("step_up")) { Text("↑ Früher") }
-            OutlinedButton(onClick = { onPlan(EditOps.moveStep(plan, i, 1)); if (i < plan.steps.size - 1) onStepIdx(i + 1) }, modifier = Modifier.testTag("step_down")) { Text("↓ Später") }
-            OutlinedButton(onClick = { onPlan(EditOps.removeStep(plan, i)); onStepIdx(0) }, enabled = plan.steps.size > 1, modifier = Modifier.testTag("step_delete")) { Text("Löschen") }
+            OutlinedButton(onClick = { onPlan(EditOps.moveStep(plan, i, -1)); if (i > 0) onStepIdx(i - 1); onSel(Sel.None) }, modifier = Modifier.testTag("step_up")) { Text("↑ Früher") }
+            OutlinedButton(onClick = { onPlan(EditOps.moveStep(plan, i, 1)); if (i < plan.steps.size - 1) onStepIdx(i + 1); onSel(Sel.None) }, modifier = Modifier.testTag("step_down")) { Text("↓ Später") }
+            OutlinedButton(onClick = { onPlan(EditOps.removeStep(plan, i)); onStepIdx(0); onSel(Sel.None) }, enabled = plan.steps.size > 1, modifier = Modifier.testTag("step_delete")) { Text("Löschen") }
         }
     }
 }
@@ -324,7 +410,10 @@ fun StepsPanel(
 @Composable
 fun ViewPanel(plan: Plan, sel: Sel, onSel: (Sel) -> Unit, onPlan: (Plan) -> Unit) {
     Column(Modifier.fillMaxWidth()) {
-        Text("Blickwinkel des Fotos (bestimmt die Wegfindung)", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Blickwinkel des Fotos (bestimmt die Wegfindung)", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.weight(1f))
+            HelpButton(HelpTexts.VIEW_TITLE, HelpTexts.VIEW, "help_view")
+        }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             ViewMode.entries.forEach { v ->
                 FilterChip(plan.view == v, { onPlan(plan.copy(view = v)) }, { Text(v.label) }, modifier = Modifier.testTag("view_${v.key}"))
@@ -332,9 +421,11 @@ fun ViewPanel(plan: Plan, sel: Sel, onSel: (Sel) -> Unit, onPlan: (Plan) -> Unit
         }
         Text(
             if (plan.view == ViewMode.SIDE) {
-                "Seitlich: Foto in normaler Blickrichtung. Der Wichtel wird von der Seite gesehen und nach hinten kleiner. Ziehe die Horizont-Linie dorthin, wo der Boden endet."
+                "Seitlich: Foto in normaler Blickrichtung. Der Wichtel wird von der Seite gesehen und nach hinten kleiner. Ziehe die Horizont-Linie dorthin, wo der Boden endet. " +
+                    "Ein markiertes Haus ist ein Kasten auf dem Boden: nur der rote Streifen unten ist gesperrt, dahinter kann sich der Wichtel verstecken."
             } else {
-                "Von oben: Foto liegt oberhalb vom Wichtel, er wird von oben gesehen und ist überall gleich groß."
+                "Von oben (Aufsicht): Das Foto zeigt die Szene von oben, der Wichtel ist überall gleich groß. Ein markiertes Haus ist seine Grundfläche: " +
+                    "das ganze Viereck ist gesperrt und der Wichtel läuft darum herum. Bäume, Büsche und Tische dagegen verdecken ihn, wenn er darunter steht. Mehr unter „? Hilfe“."
             },
             fontSize = 12.sp,
         )

@@ -47,6 +47,14 @@ class AudioPlayer {
         }
     }
 
+    /** Lautstärke eines laufenden Tons ändern (0..1). */
+    fun setVolume(volume: Float) {
+        try {
+            track?.setVolume(volume.coerceIn(0f, 1f))
+        } catch (_: Throwable) {
+        }
+    }
+
     fun stop() {
         try {
             track?.stop()

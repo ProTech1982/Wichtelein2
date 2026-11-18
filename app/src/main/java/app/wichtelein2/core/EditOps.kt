@@ -14,6 +14,23 @@ sealed interface Sel {
     object Horizon : Sel
     data class Obj(val id: Int) : Sel
     data class StepAt(val index: Int) : Sel
+
+    /** Oberes Ende des Pfads eines Leiter-/Treppen-Schritts (StepAt ist das untere Ende). */
+    data class StepTo(val index: Int) : Sel
+}
+
+/** Bearbeitungsebene: Beim Bearbeiten ist immer nur eine aktiv (Reiter Tür, Objekte, Ablauf, Ansicht), alles andere ist gesperrt. */
+enum class Layer { DOOR, OBJECTS, STEPS, HORIZON;
+
+    companion object {
+        /** Ebene zum Reiter im Editor (0 Tür, 1 Objekte, 2 Ablauf, 3 Ansicht). */
+        fun ofTab(tab: Int): Layer = when (tab) {
+            0 -> DOOR
+            1 -> OBJECTS
+            2 -> STEPS
+            else -> HORIZON
+        }
+    }
 }
 
 /** Bearbeitungsschritte am Plan (Platzieren mit Pfeilen, Größe, Drehen, Anfassen im Foto) – rein rechnerisch, ohne Android. */
@@ -35,8 +52,64 @@ object EditOps {
             if (it.id == s.id) it.copy(x = clampX(p, it.x + dx), y = clampY(p, it.y + dy)) else it
         })
         is Sel.StepAt -> p.copy(steps = p.steps.mapIndexed { i, st ->
-            if (i == s.index) st.copy(at = Pt(clampX(p, (st.at ?: defaultAt(p)).x + dx), clampY(p, (st.at ?: defaultAt(p)).y + dy))) else st
+            if (i == s.index) {
+                val c = st.at ?: stepDefault(p, st, false)
+                st.copy(at = Pt(clampX(p, c.x + dx), clampY(p, c.y + dy)))
+            } else st
         })
+        is Sel.StepTo -> p.copy(steps = p.steps.mapIndexed { i, st ->
+            if (i == s.index) {
+                val c = st.to ?: stepDefault(p, st, true)
+                st.copy(to = Pt(clampX(p, c.x + dx), clampY(p, c.y + dy)))
+            } else st
+        })
+    }
+
+    /** Startpunkt eines Orts/Pfadendes, wenn der Schritt noch keinen eigenen hat: bei Leiter/Treppe der automatische Pfad. */
+    private fun stepDefault(p: Plan, st: Step, top: Boolean): Pt {
+        if (st.action.isClimb) {
+            val path = climbPath(p, st)
+            if (path != null) return if (top) path.second else path.first
+        }
+        return defaultAt(p)
+    }
+
+    // ------------------------------------------------------------------ Leiter und Treppe
+    /** Gegenstand eines Leiter-/Treppen-Schritts: der gewählte (passender Typ), sonst der nächste passende zu `near`, sonst der erste. */
+    fun climbObject(p: Plan, s: Step, near: Pt? = null): SceneObject? {
+        if (!s.action.isClimb) return null
+        val type = s.action.climbType
+        p.objectById(s.objectId)?.let { if (it.type == type) return it }
+        val c = p.objects.filter { it.type == type }
+        return if (near != null) c.minByOrNull { it.center.dist(near) } else c.firstOrNull()
+    }
+
+    /** Automatischer Pfad am Gegenstand: Leiter von unten nach oben mittig, Treppe von unten links nach oben rechts. */
+    fun autoClimbPath(o: SceneObject, action: ActionType): Pair<Pt, Pt> =
+        if (action == ActionType.LADDER) {
+            Pair(o.toWorld(Pt(0f, o.h * 0.46f)), o.toWorld(Pt(0f, -o.h * 0.40f)))
+        } else {
+            Pair(o.toWorld(Pt(-o.w * 0.40f, o.h * 0.46f)), o.toWorld(Pt(o.w * 0.40f, -o.h * 0.30f)))
+        }
+
+    /** Die im Foto gezeigten Punkte eines Schritts: (Ort bzw. Pfad unten, Pfad oben); bei Leiter/Treppe auch der automatische Pfad. */
+    fun stepPoints(p: Plan, st: Step): Pair<Pt?, Pt?> {
+        if (st.action.isClimb) {
+            val path = climbPath(p, st)
+            if (path != null) return Pair(path.first, path.second)
+        }
+        return Pair(st.at, st.to)
+    }
+
+    /** Pfad (unten, oben) eines Leiter-/Treppen-Schritts: eigene Punkte, fehlende aus dem Gegenstand; null, wenn nichts da ist. */
+    fun climbPath(p: Plan, s: Step, near: Pt? = null): Pair<Pt, Pt>? {
+        if (!s.action.isClimb) return null
+        val a = s.at
+        val b = s.to
+        if (a != null && b != null) return Pair(a, b)
+        val o = climbObject(p, s, near) ?: return null
+        val auto = autoClimbPath(o, s.action)
+        return Pair(a ?: auto.first, b ?: auto.second)
     }
 
     /** Startpunkt, wenn ein Schritt noch keinen eigenen Ort hat und einer gesetzt wird. */
@@ -93,6 +166,8 @@ object EditOps {
             ActionType.SWEEP -> Step(a, seconds = 6f)
             ActionType.HIDE -> Step(a, retreat = if (firstHide != null) Retreat.OBJECT else Retreat.DOOR, objectId = firstHide?.id ?: -1, seconds = 4f)
             ActionType.SCARE -> Step(a, retreat = Retreat.DOOR, objectId = firstHide?.id ?: -1, seconds = 4f)
+            ActionType.LADDER, ActionType.STAIRS ->
+                Step(a, objectId = p.objects.firstOrNull { it.type == a.climbType }?.id ?: -1, seconds = 2f)
         }
         return p.copy(steps = p.steps + st)
     }
@@ -150,16 +225,40 @@ object EditOps {
 
     /**
      * Was liegt bei w? Reihenfolge: Schrittmarken, Gegenstände (oberster zuerst), Tür, Horizont (Seitenansicht).
-     * tol = Fangradius in Foto-Pixeln für Marken und Linien.
+     * tol = Fangradius in Foto-Pixeln für Marken und Linien. only: nur diese Ebene ist aktiv (der Rest ist gesperrt), null = alles.
      */
-    fun hit(p: Plan, w: Pt, tol: Float): Sel {
-        p.steps.forEachIndexed { i, st ->
-            val at = st.at
-            if (at != null && at.dist(w) <= tol) return Sel.StepAt(i)
+    fun hit(p: Plan, w: Pt, tol: Float, only: Layer? = null): Sel {
+        if (only == null || only == Layer.STEPS) {
+            p.steps.forEachIndexed { i, st ->
+                val (at, to) = stepPoints(p, st)
+                if (at != null && at.dist(w) <= tol) return Sel.StepAt(i)
+                if (to != null && to.dist(w) <= tol) return Sel.StepTo(i)
+            }
         }
-        for (o in p.objects.asReversed()) if (o.contains(w)) return Sel.Obj(o.id)
-        if (doorContains(p.door, w)) return Sel.Door
-        if (p.view == ViewMode.SIDE && abs(w.y - p.horizon) <= tol) return Sel.Horizon
+        if (only == null || only == Layer.OBJECTS) {
+            for (o in p.objects.asReversed()) if (o.contains(w)) return Sel.Obj(o.id)
+        }
+        if ((only == null || only == Layer.DOOR) && doorContains(p.door, w)) return Sel.Door
+        if ((only == null || only == Layer.HORIZON) && p.view == ViewMode.SIDE && abs(w.y - p.horizon) <= tol) return Sel.Horizon
         return Sel.None
+    }
+
+    /** Liegt w auf der aktuellen Auswahl? Nur diese darf beim Ziehen verschoben werden (alles andere ist gesperrt). */
+    fun hitsSelection(p: Plan, s: Sel, w: Pt, tol: Float): Boolean = when (s) {
+        Sel.None -> false
+        Sel.Door -> doorContains(p.door, w) || p.door.base.dist(w) <= tol
+        Sel.Horizon -> p.view == ViewMode.SIDE && abs(w.y - p.horizon) <= tol
+        is Sel.Obj -> p.objectById(s.id)?.let { it.contains(w) || it.center.dist(w) <= tol } ?: false
+        is Sel.StepAt -> p.steps.getOrNull(s.index)?.let { st -> stepPoints(p, st).first?.let { it.dist(w) <= tol } } ?: false
+        is Sel.StepTo -> p.steps.getOrNull(s.index)?.let { st -> stepPoints(p, st).second?.let { it.dist(w) <= tol } } ?: false
+    }
+
+    /** Zu welcher Ebene gehört eine Auswahl? */
+    fun layerOf(s: Sel): Layer? = when (s) {
+        Sel.None -> null
+        Sel.Door -> Layer.DOOR
+        Sel.Horizon -> Layer.HORIZON
+        is Sel.Obj -> Layer.OBJECTS
+        is Sel.StepAt, is Sel.StepTo -> Layer.STEPS
     }
 }

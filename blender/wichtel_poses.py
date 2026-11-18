@@ -28,6 +28,8 @@ ANIMS = {
     "sweep": 8,
     "scare": 6,
     "duck": 4,
+    "climb": 8,
+    "stairs": 8,
 }
 
 
@@ -199,7 +201,52 @@ def sweep(i):
     return spec, (0, 0, 0), broom
 
 
+def climb(i):
+    """Leiter klettern (Blick zur Leiter): Arme greifen abwechselnd nach oben, Knie heben sich abwechselnd."""
+    p = i / ANIMS["climb"] * 360.0
+    s = S(p)
+    spec = {}
+    up_l, up_r = max(0.0, s), max(0.0, -s)
+    spec["LeftArm"] = [("y", -30), ("x", -34 - 24 * s)]
+    spec["RightArm"] = [("y", 30), ("x", -34 + 24 * s)]
+    spec["LeftForeArm"] = [("x", -24 - 16 * s)]
+    spec["RightForeArm"] = [("x", -24 + 16 * s)]
+    spec["LeftUpLeg"] = [("x", -18 - 52 * up_l)]
+    spec["RightUpLeg"] = [("x", -18 - 52 * up_r)]
+    spec["LeftLeg"] = [("x", 14 + 74 * up_l)]
+    spec["RightLeg"] = [("x", 14 + 74 * up_r)]
+    spec["LeftFoot"] = [("x", -10 * up_l)]
+    spec["RightFoot"] = [("x", -10 * up_r)]
+    spec["Hips"] = [("z", 4 * s)]
+    spec["Spine"] = [("x", 8)]
+    spec["Spine1"] = [("x", 6), ("z", -5 * s)]
+    spec["Head"] = [("x", -14), ("z", 3 * s)]
+    return spec, (0, 0.03, 0.018 * C(2 * p) - 0.012), None
+
+
+def stairs(i):
+    """Treppe steigen: normaler Gang mit hoch gehobenen Knien, Arme locker, leichtes Wippen bei jedem Tritt."""
+    p = i / ANIMS["stairs"] * 360.0
+    s, c = S(p), C(p)
+    spec = {}
+    arms_down(spec, elbow=14)
+    up_l, up_r = max(0.0, s), max(0.0, -s)
+    spec["LeftUpLeg"] = [("x", -12 * s - 42 * up_l)]
+    spec["RightUpLeg"] = [("x", 12 * s - 42 * up_r)]
+    spec["LeftLeg"] = [("x", 20 + 55 * up_l)]
+    spec["RightLeg"] = [("x", 20 + 55 * up_r)]
+    spec["LeftFoot"] = [("x", -8 * up_l)]
+    spec["RightFoot"] = [("x", -8 * up_r)]
+    spec["LeftArm"] += [("x", 16 * s)]
+    spec["RightArm"] += [("x", -16 * s)]
+    spec["Hips"] = [("z", 4 * s), ("x", 4)]
+    spec["Spine1"] = [("z", -5 * s), ("x", 4)]
+    spec["Head"] = [("z", 3 * s)]
+    return spec, (0, 0, 0.012 * C(2 * p) - 0.008), None
+
+
 GENERATORS = {
     "idle": idle, "walk": walk, "sneak": sneak, "run": run,
     "sweep": sweep, "scare": scare, "duck": duck,
+    "climb": climb, "stairs": stairs,
 }

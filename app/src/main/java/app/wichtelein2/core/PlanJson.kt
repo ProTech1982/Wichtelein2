@@ -41,6 +41,8 @@ object PlanJson {
                 .put("action", s.action.key).put("retreat", s.retreat.key)
                 .put("object", s.objectId).put("seconds", s.seconds.toDouble())
             if (s.at != null) j.put("ax", s.at.x.toDouble()).put("ay", s.at.y.toDouble())
+            if (s.to != null) j.put("tx", s.to.x.toDouble()).put("ty", s.to.y.toDouble())
+            j.put("up", s.up)
             steps.put(j)
         }
         o.put("steps", steps)
@@ -93,6 +95,8 @@ object PlanJson {
                         retreat = Retreat.fromKey(j.optString("retreat")),
                         objectId = j.optInt("object", -1),
                         seconds = j.optDouble("seconds", 6.0).toFloat(),
+                        to = if (j.has("tx")) Pt(j.getDouble("tx").toFloat(), j.getDouble("ty").toFloat()) else null,
+                        up = j.optBoolean("up", true),
                     ),
                 )
             }

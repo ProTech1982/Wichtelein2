@@ -16,11 +16,15 @@ enum class Anim(val key: String, val frames: Int) {
     SWEEP("sweep", 8),
     SCARE("scare", 6),
     DUCK("duck", 4),
+    CLIMB("climb", 8),
+    STAIRS("stairs", 8),
 }
 
 /**
  * Ein Bild des Ablaufs. (x, y) = Fußpunkt im Foto, dir = Blickrichtung (0 zum Betrachter, im Uhrzeigersinn je 45°),
  * houseT = 0 draußen .. 1 im Haus (unsichtbar), doorOpen = 0 Tür zu .. 1 ganz offen, step = Index des Schritts (-1 Ein-/Ausgang).
+ * refY = Foto-Höhe, nach der die Wichtelgröße berechnet wird (auf Leiter/Treppe fest, sonst = y);
+ * ignore = Gegenstand, der den Wichtel nicht verdecken darf (die Leiter/Treppe, auf der er gerade ist), sonst -1.
  */
 data class Frame(
     val t: Float,
@@ -32,6 +36,8 @@ data class Frame(
     val houseT: Float,
     val doorOpen: Float,
     val step: Int,
+    val refY: Float = y,
+    val ignore: Int = -1,
 )
 
 class Simulation(val frames: List<Frame>, val fps: Int, val warnings: List<String>) {
@@ -47,8 +53,11 @@ class Simulator(private val plan: Plan, private val fps: Int = 30) {
 
     private class Raw(
         val t: Float, val x: Float, val y: Float, val dir: Int, val anim: Anim,
-        val frame: Int, val houseT: Float, val step: Int,
+        val frame: Int, val houseT: Float, val step: Int, val refY: Float, val ignore: Int,
     )
+
+    /** Der Wichtel ist auf einer Leiter/Treppe (Pfad a = unten, b = oben); solange gilt eine feste Größe und keine Verdeckung durch sie. */
+    private class Elev(val a: Pt, val b: Pt, val action: ActionType, val objId: Int, val refY: Float)
 
     private val raws = ArrayList<Raw>()
     private val doorKeys = ArrayList<Pair<Float, Float>>()
@@ -60,6 +69,7 @@ class Simulator(private val plan: Plan, private val fps: Int = 30) {
     private var inside = true
     private var phase = 0f
     private var curStep = -1
+    private var elev: Elev? = null
 
     fun run(): Simulation {
         hold(0.6f, Anim.IDLE, 1f)
@@ -69,13 +79,14 @@ class Simulator(private val plan: Plan, private val fps: Int = 30) {
                 ActionType.SWEEP -> doSweep(s)
                 ActionType.HIDE -> doHide(s)
                 ActionType.SCARE -> doScare(s)
+                ActionType.LADDER, ActionType.STAIRS -> doClimb(s)
             }
         }
         curStep = -1
         ensureInside()
         hold(0.8f, Anim.IDLE, 1f)
         val frames = raws.map { r ->
-            Frame(r.t, r.x, r.y, r.dir, r.anim, r.frame, r.houseT, doorAt(r.t), r.step)
+            Frame(r.t, r.x, r.y, r.dir, r.anim, r.frame, r.houseT, doorAt(r.t), r.step, r.refY, r.ignore)
         }
         return Simulation(frames, fps, warnings)
     }
@@ -84,7 +95,8 @@ class Simulator(private val plan: Plan, private val fps: Int = 30) {
     private fun dirIdx() = (((Math.round(heading / 45f) % 8) + 8) % 8)
 
     private fun emit(anim: Anim, frame: Int, houseT: Float) {
-        raws.add(Raw(t, pos.x, pos.y, dirIdx(), anim, frame.coerceIn(0, anim.frames - 1), houseT, curStep))
+        val e = elev
+        raws.add(Raw(t, pos.x, pos.y, dirIdx(), anim, frame.coerceIn(0, anim.frames - 1), houseT, curStep, e?.refY ?: pos.y, e?.objId ?: -1))
         t += dt
     }
 
@@ -191,27 +203,40 @@ class Simulator(private val plan: Plan, private val fps: Int = 30) {
 
     private fun walkTo(target: Pt, anim: Anim = Anim.WALK, speedH: Float = 0.9f, strideH: Float = 0.45f,
                        onTick: ((Float) -> Unit)? = null) {
+        descend()   // wer noch auf einer Leiter/Treppe steht, steigt zuerst hinunter
         val r = nav.findPath(pos, target)
         if (!r.ok) warnings.add("Kein Weg gefunden (Schritt $curStep)")
         move(r.points, anim, speedH, strideH, onTick)
     }
 
     // ------------------------------------------------------------------ Tür
+    /** Stelle vor der Tür, an der der Wichtel aus der Tür kommt bzw. die Tür betritt. */
+    private fun doorFront(): Pt {
+        val d = plan.door.base
+        return nav.nearestFree(Pt(d.x, d.y + 0.55f * heightAt(d)))
+    }
+
+    /**
+     * Herauskommen: Tür auf, der Wichtel steht noch im Haus (unsichtbar) und tritt in die Türöffnung; erst wenn er halb
+     * sichtbar in der Öffnung steht, geht er heraus. Die Tür schließt sich, wenn er draußen ist.
+     */
     private fun emerge() {
         val d = plan.door.base
-        val out = nav.nearestFree(Pt(d.x, d.y + 0.55f * heightAt(d)))
+        val out = doorFront()
         pos = d
         heading = 0f
         setDoor(t, 1f)
         hold(0.85f, Anim.IDLE, 1f)
-        val n = max(1, Math.round(0.9f * fps))
+        val n = max(1, Math.round(1.2f * fps))
         val dirAng = angleOf(out - d)
         for (i in 1..n) {
             val u = i.toFloat() / n
-            pos = Pt(d.x + (out.x - d.x) * u, d.y + (out.y - d.y) * u)
+            val moved = smooth(max(0f, (u - 0.5f) * 2f))            // erst im Türrahmen auftauchen, dann herausgehen
+            val before = pos
+            pos = Pt(d.x + (out.x - d.x) * moved, d.y + (out.y - d.y) * moved)
             turnToward(dirAng, 900f * dt)
             val hpx = heightAt(pos)
-            phase += (out.dist(d) / n) / (0.45f * hpx)
+            phase += before.dist(pos) / (0.45f * hpx) + 0.6f * dt
             emit(Anim.WALK, floor((phase - floor(phase)) * Anim.WALK.frames).toInt(), 1f - smooth(u))
         }
         pos = out
@@ -223,29 +248,42 @@ class Simulator(private val plan: Plan, private val fps: Int = 30) {
         if (inside) emerge()
     }
 
+    /**
+     * Hineingehen (Gegenstück zum Herauskommen): zur Stelle vor der Tür gehen, Tür öffnet sich rechtzeitig, der Wichtel
+     * geht in die Türöffnung und verschwindet dort; danach schließt sich die Tür genau einmal.
+     */
     private fun enterHouse(anim: Anim, speedH: Float, strideH: Float) {
         val d = plan.door.base
+        val out = doorFront()
         var opened = false
         var fullOpen = 0f
-        val trigger = 1.3f * heightAt(d)
-        walkTo(d, anim, speedH, strideH) { rem ->
+        val trigger = 1.0f * heightAt(out)
+        walkTo(out, anim, speedH, strideH) { rem ->
             if (!opened && rem <= trigger) {
                 fullOpen = setDoor(t, 1f)
                 opened = true
             }
         }
         if (!opened) fullOpen = setDoor(t, 1f)
-        pos = d
-        // Warten, bis die Tür ganz offen ist, mit Blick zur Tür
-        heading = 180f
-        while (t < fullOpen) emit(Anim.IDLE, 0, 0f)
-        val n = max(1, Math.round(0.9f * fps))
+        pos = out
+        // Mit Blick zur Tür warten, bis sie ganz offen ist
+        val toDoor = angleOf(d - out)
+        while (t < fullOpen) {
+            turnToward(toDoor, 600f * dt)
+            emit(Anim.IDLE, 0, 0f)
+        }
+        val n = max(1, Math.round(1.2f * fps))
         for (i in 1..n) {
             val u = i.toFloat() / n
+            val moved = smooth(min(1f, u * 2f))                      // erst zur Türöffnung gehen, dann dort verschwinden
+            val before = pos
+            pos = Pt(out.x + (d.x - out.x) * moved, out.y + (d.y - out.y) * moved)
+            turnToward(toDoor, 900f * dt)
             val hpx = heightAt(pos)
-            phase += (0.35f * hpx / n) / (strideH * hpx)
+            phase += before.dist(pos) / (strideH * hpx) + 0.6f * dt
             emit(anim, floor((phase - floor(phase)) * anim.frames).toInt(), smooth(u))
         }
+        pos = d
         setDoor(t + 0.05f, 0f)
         hold(0.9f, Anim.IDLE, 1f)
         inside = true
@@ -375,6 +413,80 @@ class Simulator(private val plan: Plan, private val fps: Int = 30) {
         } else {
             if (s.retreat == Retreat.OBJECT) warnings.add("Kein Gegenstand zur Flucht, Wichtel läuft in die Tür")
             enterHouse(Anim.RUN, 1.9f, 0.75f)
+        }
+    }
+
+    // ------------------------------------------------------------------ Leiter und Treppe
+    /** Blickrichtung (Grad) auf der Leiter/Treppe: seitlich zur Leiter hin bzw. entlang der Treppe, von oben in Bewegungsrichtung. */
+    private fun climbHeading(from: Pt, to: Pt, action: ActionType): Float = when {
+        plan.view == ViewMode.TOP -> angleOf(to - from)
+        action == ActionType.LADDER -> 180f
+        to.x >= from.x -> 90f
+        else -> 270f
+    }
+
+    /** Läuft den Pfad von `from` nach `to` auf der Leiter/Treppe e (feste Größe, keine Verdeckung durch sie). */
+    private fun climbAlong(from: Pt, to: Pt, e: Elev) {
+        elev = e
+        val ladder = e.action == ActionType.LADDER
+        val anim = if (ladder) Anim.CLIMB else Anim.STAIRS
+        val speedH = if (ladder) 0.30f else 0.45f
+        val strideH = if (ladder) 0.26f else 0.32f
+        val hpx = max(1f, scaler.heightAt(e.refY))
+        val len = from.dist(to)
+        val n = max(2, Math.ceil((len / (speedH * hpx * dt)).toDouble()).toInt())
+        val face = climbHeading(from, to, e.action)
+        heading = face
+        for (i in 1..n) {
+            val u = i.toFloat() / n
+            pos = Pt(from.x + (to.x - from.x) * u, from.y + (to.y - from.y) * u)
+            phase += (len / n) / (strideH * hpx)
+            emit(anim, floor((phase - floor(phase)) * anim.frames).toInt(), 0f)
+        }
+        pos = to
+    }
+
+    /** Wer auf einer Leiter/Treppe steht, steigt (Pfad rückwärts) wieder hinunter. */
+    private fun descend() {
+        val e = elev ?: return
+        hold(0.25f, Anim.IDLE, 0f)
+        climbAlong(e.b, e.a, e)
+        elev = null
+        hold(0.2f, Anim.IDLE, 0f)
+    }
+
+    private fun samePath(e: Elev, a: Pt, b: Pt) = e.a.dist(a) < 1f && e.b.dist(b) < 1f
+
+    private fun doClimb(s: Step) {
+        val e0 = elev
+        // Steht der Wichtel schon auf der Leiter/Treppe dieses Schritts (z. B. „hinunter“ nach „hinauf“), gilt deren Pfad.
+        val path = if (e0 != null && e0.action == s.action && s.at == null && s.to == null && (s.objectId < 0 || s.objectId == e0.objId)) {
+            Pair(e0.a, e0.b)
+        } else {
+            EditOps.climbPath(plan, s, pos)
+        }
+        if (path == null) {
+            warnings.add("Keine ${s.action.label} markiert (Schritt ${curStep + 1}): im Tab „Objekte“ eine anlegen oder den Pfad im Foto setzen")
+            return
+        }
+        val (a, b) = path
+        val objId = EditOps.climbObject(plan, s, pos)?.id ?: e0?.objId ?: -1
+        val cur = elev
+        if (cur != null && !samePath(cur, a, b)) descend()
+        val e = elev ?: Elev(a, b, s.action, objId, a.y)
+        if (elev == null) {
+            ensureOutside()
+            walkTo(a)
+            hold(0.25f, Anim.IDLE, 0f)
+            climbAlong(a, b, e)               // hinauf (bei „hinunter“ steigt er erst hinauf, damit er oben ankommt)
+            hold(if (s.up) max(0.3f, s.seconds) else 0.5f, Anim.IDLE, 0f)
+        } else if (s.up) {
+            hold(max(0.3f, s.seconds), Anim.IDLE, 0f)
+        }
+        if (!s.up) {
+            climbAlong(b, a, e)
+            elev = null
+            hold(0.3f, Anim.IDLE, 0f)
         }
     }
 }

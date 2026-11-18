@@ -34,6 +34,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.wichtelein2.core.EditOps
+import app.wichtelein2.core.Layer
 import app.wichtelein2.core.Plan
 import app.wichtelein2.core.Sel
 import app.wichtelein2.core.InteriorKind
@@ -62,6 +63,20 @@ fun EditorScreen(
     var sel by remember { mutableStateOf<Sel>(Sel.Door) }
     var stepIdx by remember { mutableIntStateOf(0) }
     var pickIdx by remember { mutableIntStateOf(-1) }
+    var pickTop by remember { mutableStateOf(false) }
+    // Der Wichtel als Größenvorschau steht nur auf Wunsch (und im Reiter Ansicht) im Foto, damit er beim Platzieren die Tür nicht verdeckt
+    var wichtelPreview by remember { mutableStateOf(false) }
+
+    // Auswahl setzen: Im Reiter Tür bleibt die Tür immer gewählt; ein Schritt-Punkt macht seinen Schritt zum aktuellen
+    fun select(s: Sel) {
+        if (s == Sel.None && tab == 0) return
+        sel = s
+        when (s) {
+            is Sel.StepAt -> stepIdx = s.index
+            is Sel.StepTo -> stepIdx = s.index
+            else -> Unit
+        }
+    }
     var ready by remember { mutableStateOf(false) }
 
     LaunchedEffect(plan.view, colorsKey) {
@@ -87,6 +102,13 @@ fun EditorScreen(
         ) {
             OutlinedButton(onClick = onBack, modifier = Modifier.testTag("editor_back")) { Text("‹") }
             Spacer(Modifier.weight(1f))
+            FilterChip(
+                selected = wichtelPreview || tab == 3,
+                onClick = { wichtelPreview = !wichtelPreview },
+                enabled = tab != 3,
+                label = { Text("Wichtel", fontSize = 12.sp, maxLines = 1) },
+                modifier = Modifier.testTag("toggle_wichtel"),
+            )
             Button(onClick = onPreview, enabled = ready, modifier = Modifier.testTag("btn_preview")) { Text("▶ Vorschau") }
             Button(onClick = onExport, enabled = ready, modifier = Modifier.testTag("btn_export")) { Text("Video") }
         }
@@ -98,21 +120,25 @@ fun EditorScreen(
                 customInterior = customInterior,
                 spritesReady = ready,
                 sel = sel,
+                layer = Layer.ofTab(tab),
+                activeStep = stepIdx,
+                showWichtel = wichtelPreview || tab == 3,
                 pickPoint = pickIdx >= 0,
-                onSel = { sel = it },
+                onSel = { select(it) },
                 onPlan = onPlan,
                 onPicked = { p ->
                     val i = pickIdx
+                    val top = pickTop
                     pickIdx = -1
                     if (i in plan.steps.indices) {
-                        onPlan(EditOps.updateStep(plan, i) { it.copy(at = p) })
-                        sel = Sel.StepAt(i)
+                        onPlan(EditOps.updateStep(plan, i) { if (top) it.copy(to = p) else it.copy(at = p) })
+                        sel = if (top) Sel.StepTo(i) else Sel.StepAt(i)
                     }
                 },
             )
             if (pickIdx >= 0) {
                 Text(
-                    "Tippe im Foto auf den Ort",
+                    if (pickTop) "Tippe im Foto auf das obere Ende" else "Tippe im Foto auf den Ort",
                     color = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier.align(Alignment.TopCenter).padding(8.dp)
                         .background(MaterialTheme.colorScheme.primary)
@@ -144,7 +170,7 @@ fun EditorScreen(
             when (tab) {
                 0 -> DoorPanel(plan, sel, plan.door.interior == InteriorKind.CUSTOM || customInterior != null, { sel = it }, onPlan, onPickInterior)
                 1 -> ObjectsPanel(plan, sel, { sel = it }, onPlan)
-                2 -> StepsPanel(plan, stepIdx, { stepIdx = it }, sel, { sel = it }, onPlan) { i -> pickIdx = i; sel = Sel.None }
+                2 -> StepsPanel(plan, stepIdx, { stepIdx = it }, sel, { sel = it }, onPlan) { i, top -> pickIdx = i; pickTop = top; sel = Sel.None }
                 else -> ViewPanel(plan, sel, { sel = it }, onPlan)
             }
         }

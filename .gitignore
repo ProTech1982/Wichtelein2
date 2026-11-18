@@ -12,3 +12,4 @@
 *.keystore
 /.localtools/
 /.localbuild/
+__pycache__/

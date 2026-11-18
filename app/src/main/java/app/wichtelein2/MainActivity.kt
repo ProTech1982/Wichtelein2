@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -34,6 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.core.content.FileProvider
 import app.wichtelein2.ar.ArScreen
+import app.wichtelein2.core.Backgrounds
 import app.wichtelein2.core.InteriorKind
 import app.wichtelein2.core.Mixdown
 import app.wichtelein2.core.MusicChoice
@@ -42,6 +44,7 @@ import app.wichtelein2.core.Simulation
 import app.wichtelein2.core.Simulator
 import app.wichtelein2.core.UpdateCheck
 import app.wichtelein2.data.AppSettings
+import app.wichtelein2.data.BackgroundStore
 import app.wichtelein2.data.ProjectStore
 import app.wichtelein2.data.SettingsStore
 import app.wichtelein2.data.Updater
@@ -85,6 +88,8 @@ private fun App() {
     val settingsStore = remember { SettingsStore(ctx) }
     val project = remember { ProjectStore(ctx) }
     val sprites = remember { SpriteLibrary(ctx) }
+    val bgStore = remember { BackgroundStore(ctx) }
+    val designs = remember { Backgrounds.parse(ctx.assets.open("backgrounds/backgrounds.json").bufferedReader(Charsets.UTF_8).use { it.readText() }) }
 
     var settings by remember { mutableStateOf(settingsStore.load()) }
     var screen by remember { mutableStateOf(Screen.HOME) }
@@ -99,6 +104,13 @@ private fun App() {
     val exportCancelled = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
     var updateResult by remember { mutableStateOf<UpdateCheck.Result?>(null) }
     var updateDialog by remember { mutableStateOf<UpdateDialogState?>(null) }
+    var musicVersion by remember { mutableIntStateOf(0) }
+    var pendingMusicBg by remember { mutableStateOf<String?>(null) }
+
+    fun changeSettings(s: AppSettings) {
+        settings = s
+        settingsStore.save(s)
+    }
 
     sprites.setColors(settings.colors)
 
@@ -178,6 +190,27 @@ private fun App() {
         }
     }
 
+    // Startseite: eigenes Hintergrundbild und eigene Musik zu einem Hintergrund
+    val pickBgImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) scope.launch {
+            val id = withContext(Dispatchers.IO) { bgStore.importImage(uri) }
+            if (id != null) changeSettings(settings.copy(customBgs = settings.customBgs + id, bgId = id)) else message = "Das Bild konnte nicht geladen werden."
+        }
+    }
+    val pickBgMusic = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val id = pendingMusicBg
+        pendingMusicBg = null
+        if (uri != null && id != null) scope.launch {
+            val ok = withContext(Dispatchers.IO) { bgStore.importMusic(id, uri) }
+            if (ok) {
+                changeSettings(settings.copy(bgMusic = settings.bgMusic + (id to Backgrounds.MUSIC_FILE)))
+                musicVersion++
+            } else {
+                message = "Die Musikdatei konnte nicht geladen werden."
+            }
+        }
+    }
+
     fun startCheck() {
         updateDialog = UpdateDialogState.Checking
         scope.launch {
@@ -225,6 +258,27 @@ private fun App() {
                     busy = busy,
                     message = message,
                     updateHint = updateResult?.let { "Update verfügbar: ${it.version ?: ""}" },
+                    settings = settings,
+                    designs = designs,
+                    loadBackground = { id, maxSide -> bgStore.loadBitmap(id, designs, maxSide) },
+                    musicFile = { id -> bgStore.musicFile(id).takeIf { it.length() > 0 } },
+                    musicVersion = musicVersion,
+                    onChange = { changeSettings(it) },
+                    onAddBackground = { pickBgImage.launch("image/*") },
+                    onPickBackgroundMusic = { id ->
+                        pendingMusicBg = id
+                        pickBgMusic.launch("audio/*")
+                    },
+                    onDeleteBackground = { id ->
+                        bgStore.delete(id)
+                        changeSettings(
+                            settings.copy(
+                                customBgs = settings.customBgs - id,
+                                bgMusic = settings.bgMusic - id,
+                                bgId = if (settings.bgId == id) Backgrounds.DEFAULT_ID else settings.bgId,
+                            ),
+                        )
+                    },
                     onPick = { pickPhoto.launch("image/*") },
                     onTake = {
                         if (androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -254,7 +308,7 @@ private fun App() {
                         settings = settings,
                         sprites = sprites,
                         version = Updater.installedVersionName(ctx) + " (Build " + Updater.installedBuild(ctx) + ")",
-                        onChange = { s: AppSettings -> settings = s; settingsStore.save(s) },
+                        onChange = { s: AppSettings -> changeSettings(s) },
                         onCheckUpdate = { startCheck() },
                         onBack = { screen = Screen.HOME },
                     )

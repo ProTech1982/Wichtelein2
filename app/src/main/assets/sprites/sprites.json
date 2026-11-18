@@ -14,7 +14,9 @@
   "run": 8,
   "sweep": 8,
   "scare": 6,
-  "duck": 4
+  "duck": 4,
+  "climb": 8,
+  "stairs": 8
  },
  "refLuma": {
   "hat": 0.3462,

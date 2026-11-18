@@ -230,4 +230,119 @@ class SimulatorTest {
         val top = Scaler(p.copy(view = ViewMode.TOP))
         assertEquals(top.heightAt(100f), top.heightAt(900f), 0.001f)
     }
+
+    // ------------------------------------------------------------------ Tür: ein Durchgang = einmal öffnen und schließen
+    @Test
+    fun everyDoorPassOpensOnceAndWichtelOnlyCrossesWhileOpen() {
+        for (p in plans() + base(steps = listOf(Step(ActionType.HIDE, retreat = Retreat.DOOR), Step(ActionType.SWEEP, seconds = 1f), Step(ActionType.HIDE, retreat = Retreat.DOOR, seconds = 1f)))) {
+            val s = Simulator(p).run()
+            var opens = 0
+            var crossings = 0
+            for (i in 1 until s.frames.size) {
+                val a = s.frames[i - 1]
+                val b = s.frames[i]
+                if (a.doorOpen < 0.5f && b.doorOpen >= 0.5f) opens++
+                if ((a.houseT <= 0.5f) != (b.houseT <= 0.5f)) crossings++
+                if (b.houseT > 0.02f && b.houseT < 0.98f) assertTrue("Wichtel geht durch geschlossene Tür bei t=${b.t}", b.doorOpen > 0.9f)
+            }
+            assertEquals("Türöffnungen und Durchgänge passen nicht zusammen", crossings, opens)
+        }
+    }
+
+    @Test
+    fun enteringWalksToTheDoorwayInsteadOfShrinkingAtTheDoorstep() {
+        val p = base(steps = listOf(Step(ActionType.SCARE, retreat = Retreat.DOOR)))
+        val s = Simulator(p).run()
+        val door = p.door.base
+        val half = s.frames.last { it.houseT < 0.5f }
+        val start = s.frames.first { it.step == 0 && it.houseT > 0.01f && it.anim != Anim.IDLE && it.t > 5f }
+        // Beim Verschwinden steht er in der Türöffnung (Füße an der Türkante), davor kam er von vorn auf die Tür zu
+        assertEquals(door.x, half.x, 2f)
+        assertEquals(door.y, half.y, 2f)
+        assertTrue("Er geht beim Hineingehen noch ein Stück", start.y > door.y + 5f)
+    }
+
+    // ------------------------------------------------------------------ Leiter und Treppe
+    private fun ladder() = SceneObject(5, ObjType.LADDER, 700f, 560f, 120f, 350f)
+    private fun stairs() = SceneObject(6, ObjType.STAIRS, 1000f, 700f, 330f, 220f)
+
+    @Test
+    fun ladderClimbsUpStaysThenComesDownBeforeTheNextStep() {
+        val p = base(steps = listOf(Step(ActionType.LADDER, objectId = 5, seconds = 1f), Step(ActionType.SWEEP, seconds = 1f)), objs = listOf(ladder()))
+        val s = Simulator(p).run()
+        val path = EditOps.climbPath(p, p.steps[0])!!
+        val climb = s.frames.filter { it.anim == Anim.CLIMB }
+        assertTrue(climb.size > 30)
+        // oben angekommen; beim Klettern feste Größe und kein Verdecken durch die Leiter
+        assertEquals(path.second.y, climb.minOf { it.y }, 1f)
+        for (f in climb) {
+            assertEquals(path.first.y, f.refY, 1f)
+            assertEquals(5, f.ignore)
+            assertEquals(path.first.x, f.x, 1f)
+        }
+        // senkrecht, Blick zur Leiter (weg vom Betrachter)
+        assertTrue(climb.all { it.dir == 4 })
+        // erst nach dem Hinuntersteigen wird gefegt
+        val lastClimb = s.frames.indexOfLast { it.anim == Anim.CLIMB }
+        val firstSweep = s.frames.indexOfFirst { it.anim == Anim.SWEEP }
+        assertTrue(lastClimb < firstSweep)
+        assertEquals(path.first.y, s.frames[lastClimb].y, 2f)
+        assertEquals(-1, s.frames[firstSweep].ignore)
+        assertEquals(1f, s.frames.last().houseT, 0.001f)
+    }
+
+    @Test
+    fun stairsDownFromTheGroundGoesUpFirstThenDown() {
+        val p = base(steps = listOf(Step(ActionType.STAIRS, objectId = 6, up = false)), objs = listOf(stairs()))
+        val s = Simulator(p).run()
+        val path = EditOps.climbPath(p, p.steps[0])!!
+        val st = s.frames.filter { it.anim == Anim.STAIRS }
+        assertEquals(path.first.y, st.first().y, 6f)
+        assertEquals(path.second.y, st.minOf { it.y }, 1f)
+        assertEquals(path.first.y, st.last().y, 1f)
+        val topIdx = st.indexOfFirst { it.y == st.minOf { f -> f.y } }
+        assertTrue(topIdx > 10 && topIdx < st.size - 10)
+        // seitlich: Blick nach rechts hinauf, nach links hinunter
+        assertTrue(st.take(st.size / 2).drop(5).all { it.dir == 2 })
+        assertTrue(st.drop(st.size / 2 + 5).all { it.dir == 6 })
+    }
+
+    @Test
+    fun stairsUpThenDownContinuesOnTheSamePathWithoutWalkingBack() {
+        val p = base(steps = listOf(Step(ActionType.STAIRS, objectId = 6, up = true, seconds = 1f), Step(ActionType.STAIRS, up = false)), objs = listOf(stairs()))
+        val s = Simulator(p).run()
+        assertTrue(s.frames.filter { it.step == 1 }.none { it.anim == Anim.WALK })
+        assertTrue(s.frames.filter { it.step == 1 }.any { it.anim == Anim.STAIRS })
+        assertEquals(1f, s.frames.last().houseT, 0.001f)
+    }
+
+    @Test
+    fun climbingWorksInTopViewAndCustomPathIsUsed() {
+        val a = Pt(300f, 800f)
+        val b = Pt(300f, 500f)
+        val p = base(ViewMode.TOP, listOf(Step(ActionType.LADDER, at = a, to = b, up = true, seconds = 1f)))
+        val s = Simulator(p).run()
+        val climb = s.frames.filter { it.anim == Anim.CLIMB }
+        assertTrue(climb.isNotEmpty())
+        assertEquals(b.y, climb.minOf { it.y }, 1f)
+        assertTrue(s.warnings.isEmpty())
+    }
+
+    @Test
+    fun missingLadderGivesWarningAndStillEndsInside() {
+        val p = base(steps = listOf(Step(ActionType.LADDER), Step(ActionType.SWEEP, seconds = 1f)))
+        val s = Simulator(p).run()
+        assertTrue(s.warnings.any { it.contains("Leiter") })
+        assertTrue(s.frames.none { it.anim == Anim.CLIMB })
+        assertEquals(1f, s.frames.last().houseT, 0.001f)
+    }
+
+    @Test
+    fun climbEndingTheWholeSequenceStillGetsDownAndHome() {
+        val p = base(steps = listOf(Step(ActionType.LADDER, objectId = 5, up = true, seconds = 1f)), objs = listOf(ladder()))
+        val s = Simulator(p).run()
+        assertEquals(1f, s.frames.last().houseT, 0.001f)
+        assertEquals(0f, s.frames.last().doorOpen, 0.01f)
+        assertTrue(s.frames.filter { it.anim == Anim.CLIMB }.size > 60)
+    }
 }

@@ -1,6 +1,8 @@
 package app.wichtelein2.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -120,5 +122,70 @@ class EditOpsTest {
     fun horizonMovesOnlyVertically() {
         val p = EditOps.move(p0, Sel.Horizon, 50f, 30f)
         assertEquals(p0.horizon + 30f, p.horizon, 0.001f)
+    }
+
+    @Test
+    fun climbStepsGetAutomaticPathAndCanBeMoved() {
+        var p = EditOps.addObject(p0, ObjType.LADDER)
+        p = EditOps.addStep(p, ActionType.LADDER)
+        val idx = p.steps.size - 1
+        val st = p.steps[idx]
+        assertEquals(p.objects[0].id, st.objectId)
+        assertTrue(st.up)
+        val (a, b) = EditOps.climbPath(p, st)!!
+        assertTrue("oben liegt über unten", b.y < a.y)
+        // Verschieben des oberen Endes geht vom automatischen Pfad aus; das untere bleibt automatisch
+        val q = EditOps.move(p, Sel.StepTo(idx), 10f, 0f)
+        assertEquals(b.x + 10f, q.steps[idx].to!!.x, 0.01f)
+        assertNull(q.steps[idx].at)
+        // beide Enden sind im Foto anfassbar, ein anderer Schritt/anderes Bauteil nicht
+        assertEquals(Sel.StepAt(idx), EditOps.hit(q, a, 5f, Layer.STEPS))
+        assertEquals(Sel.StepTo(idx), EditOps.hit(q, q.steps[idx].to!!, 5f, Layer.STEPS))
+        assertEquals(Sel.None, EditOps.hit(q, a, 5f, Layer.DOOR))
+    }
+
+    @Test
+    fun staircaseRunsFromBottomLeftToTopRight() {
+        val o = SceneObject(1, ObjType.STAIRS, 800f, 600f, 300f, 200f)
+        val (a, b) = EditOps.autoClimbPath(o, ActionType.STAIRS)
+        assertTrue(a.x < o.x && b.x > o.x)
+        assertTrue(a.y > o.y && b.y < o.y)
+        val (la, lb) = EditOps.autoClimbPath(o, ActionType.LADDER)
+        assertEquals(o.x, la.x, 0.01f)
+        assertEquals(o.x, lb.x, 0.01f)
+        assertTrue(lb.y < la.y)
+    }
+
+    @Test
+    fun onlyTheActiveLayerCanBeHitAndOnlyTheSelectionCanBeDragged() {
+        val d = p0.door
+        var p = EditOps.addObject(p0, ObjType.BOX)
+        val id = p.objects[0].id
+        val w = Pt(d.x, d.y - d.h / 2f)
+        p = EditOps.move(p, Sel.Obj(id), w.x - p.objects[0].x, w.y - p.objects[0].y)
+        // Tür und Kiste liegen übereinander: je Ebene wird nur das Eigene getroffen
+        assertEquals(Sel.Obj(id), EditOps.hit(p, w, 5f, Layer.OBJECTS))
+        assertEquals(Sel.Door, EditOps.hit(p, w, 5f, Layer.DOOR))
+        assertEquals(Sel.None, EditOps.hit(p, w, 5f, Layer.STEPS))
+        // ziehen darf nur die Auswahl
+        assertTrue(EditOps.hitsSelection(p, Sel.Door, w, 5f))
+        assertTrue(EditOps.hitsSelection(p, Sel.Obj(id), w, 5f))
+        assertFalse(EditOps.hitsSelection(p, Sel.Obj(id), Pt(5f, 5f), 5f))
+        assertFalse(EditOps.hitsSelection(p, Sel.None, w, 5f))
+        assertEquals(Layer.DOOR, Layer.ofTab(0))
+        assertEquals(Layer.OBJECTS, EditOps.layerOf(Sel.Obj(id)))
+        assertEquals(Layer.STEPS, EditOps.layerOf(Sel.StepTo(0)))
+    }
+
+    @Test
+    fun movingAStepNeverTouchesOtherSteps() {
+        var p = EditOps.addStep(EditOps.addStep(p0, ActionType.SCARE), ActionType.SWEEP)
+        p = EditOps.updateStep(p, 0) { it.copy(at = Pt(100f, 100f)) }
+        p = EditOps.updateStep(p, 1) { it.copy(at = Pt(300f, 300f)) }
+        p = EditOps.updateStep(p, 2) { it.copy(at = Pt(500f, 500f)) }
+        val q = EditOps.move(p, Sel.StepAt(0), 20f, 0f)
+        assertEquals(Pt(120f, 100f), q.steps[0].at)
+        assertEquals(Pt(300f, 300f), q.steps[1].at)
+        assertEquals(Pt(500f, 500f), q.steps[2].at)
     }
 }

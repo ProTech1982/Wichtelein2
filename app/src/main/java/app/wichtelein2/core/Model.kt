@@ -67,6 +67,7 @@ enum class ObjType(
     TREE("tree", "Baum", 0.22f, 0.45f, 0.22f, 0.10f, 0.20f, 0.20f, 1f, true, true, ShapeKind.OVAL),
     HOUSE("house", "Haus", 0.30f, 0.35f, 1.0f, 0.35f, 1.0f, 1.0f, 1f, true, false, ShapeKind.RECT),
     LADDER("ladder", "Leiter", 0.08f, 0.35f, 0.9f, 0.14f, 1.0f, 1.0f, 1f, true, false, ShapeKind.RECT),
+    STAIRS("stairs", "Treppe", 0.22f, 0.22f, 1.0f, 0.20f, 1.0f, 1.0f, 1f, false, false, ShapeKind.RECT),
     GRASS("grass", "Gras", 0.25f, 0.10f, 0f, 0f, 0f, 0f, 2.4f, true, true, ShapeKind.OVAL),
     BUSH("bush", "Busch", 0.16f, 0.12f, 0.8f, 0.35f, 0.8f, 0.8f, 1f, true, true, ShapeKind.OVAL),
     STONE("stone", "Stein", 0.10f, 0.08f, 1.0f, 0.55f, 0.9f, 0.9f, 1f, true, false, ShapeKind.OVAL),
@@ -172,7 +173,15 @@ data class SceneObject(
 enum class ActionType(val key: String, val label: String) {
     SWEEP("sweep", "Fegen"),
     HIDE("hide", "Verstecken"),
-    SCARE("scare", "Erschrecken");
+    SCARE("scare", "Erschrecken"),
+    LADDER("ladder", "Leiter"),
+    STAIRS("stairs", "Treppe");
+
+    /** Leiter und Treppe: der Wichtel geht einen einstellbaren Pfad hinauf oder hinunter. */
+    val isClimb get() = this == LADDER || this == STAIRS
+
+    /** Welcher Gegenstandstyp zu dieser Aktion gehört (nur Leiter/Treppe). */
+    val climbType get() = if (this == LADDER) ObjType.LADDER else ObjType.STAIRS
 
     companion object {
         fun fromKey(k: String) = entries.firstOrNull { it.key == k } ?: SWEEP
@@ -192,6 +201,9 @@ enum class Retreat(val key: String, val label: String) {
 /**
  * Ein Schritt des Ablaufs. at = Ort (Fegen: Mitte der Fegefläche, Erschrecken: Ort des Schrecks), null = automatisch.
  * retreat/objectId = Ziel beim Verstecken bzw. bei der Flucht; seconds = Fegedauer bzw. Zeit im Versteck.
+ *
+ * Leiter/Treppe: at = unteres Ende des Pfads, to = oberes Ende (null = automatisch aus dem Gegenstand objectId),
+ * up = true: von unten nach oben, false: von oben nach unten; seconds = Zeit oben, bevor es weitergeht.
  */
 data class Step(
     val action: ActionType,
@@ -199,6 +211,8 @@ data class Step(
     val retreat: Retreat = Retreat.DOOR,
     val objectId: Int = -1,
     val seconds: Float = 6f,
+    val to: Pt? = null,
+    val up: Boolean = true,
 )
 
 data class Plan(

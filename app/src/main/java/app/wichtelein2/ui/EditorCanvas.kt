@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import app.wichtelein2.core.Anim
 import app.wichtelein2.core.EditOps
+import app.wichtelein2.core.Layer
 import app.wichtelein2.core.ObjType
 import app.wichtelein2.core.Plan
 import app.wichtelein2.core.Pt
@@ -52,8 +53,9 @@ private fun typeColor(t: ObjType): Int = when (t) {
 }
 
 /**
- * Foto mit Tür, markierten Gegenständen, Horizont und Wichtel-Größenvorschau. Antippen wählt aus,
- * Ziehen verschiebt, der Griff unten rechts ändert die Größe. pickPoint: nächster Fingertipp setzt einen Ort.
+ * Foto mit Tür, markierten Gegenständen, Horizont und (auf Wunsch) Wichtel-Größenvorschau. Antippen wählt aus (nur in der
+ * aktiven Ebene, alles andere ist gesperrt und blass), Ziehen verschiebt nur die Auswahl, der Griff unten rechts ändert die
+ * Größe. pickPoint: nächster Fingertipp setzt einen Ort.
  */
 @Composable
 fun EditorCanvas(
@@ -63,6 +65,9 @@ fun EditorCanvas(
     customInterior: Bitmap?,
     spritesReady: Boolean,
     sel: Sel,
+    layer: Layer,
+    activeStep: Int,
+    showWichtel: Boolean,
     pickPoint: Boolean,
     onSel: (Sel) -> Unit,
     onPlan: (Plan) -> Unit,
@@ -72,6 +77,7 @@ fun EditorCanvas(
     val renderer = remember(plan, photo, customInterior) { Renderer(plan, photo, sprites, customInterior) }
     val planState = rememberUpdatedState(plan)
     val selState = rememberUpdatedState(sel)
+    val layerState = rememberUpdatedState(layer)
     val pickState = rememberUpdatedState(pickPoint)
     val onSelC = rememberUpdatedState(onSel)
     val onPlanC = rememberUpdatedState(onPlan)
@@ -99,7 +105,7 @@ fun EditorCanvas(
                     detectTapGestures { off ->
                         val k = size.width / planState.value.width.toFloat()
                         val p = Pt(off.x / k, off.y / k)
-                        if (pickState.value) onPickedC.value(p) else onSelC.value(EditOps.hit(planState.value, p, 28f * density / k))
+                        if (pickState.value) onPickedC.value(p) else onSelC.value(EditOps.hit(planState.value, p, 28f * density / k, layerState.value))
                     }
                 }
                 .pointerInput(plan.width, plan.height) {
@@ -116,15 +122,12 @@ fun EditorCanvas(
                             // Griff nur nahe an seinem Kreis, damit kleine Türen und Gegenstände am Körper verschiebbar bleiben
                             if (h != null && h.dist(p) <= 18f * density / k) {
                                 mode = DragMode.Resize
+                            } else if (EditOps.hitsSelection(planState.value, selState.value, p, tol)) {
+                                // Verschoben wird nur, was gerade ausgewählt ist; alles andere bleibt, wo es ist
+                                mode = DragMode.Move
+                                target = selState.value
                             } else {
-                                val hit = EditOps.hit(planState.value, p, tol)
-                                if (hit != Sel.None) {
-                                    onSelC.value(hit)
-                                    mode = DragMode.Move
-                                    target = hit
-                                } else {
-                                    mode = DragMode.None
-                                }
+                                mode = DragMode.None
                             }
                             if (mode == DragMode.Resize) target = selState.value
                         },
@@ -155,20 +158,24 @@ fun EditorCanvas(
                 nc.save()
                 nc.scale(k, k)
                 renderer.draw(nc, null)
-                if (spritesReady) {
+                if (spritesReady && showWichtel) {
                     val sc = Scaler(plan)
                     val d = plan.door
                     val outY = d.y + 0.55f * sc.heightAt(d.y)
                     renderer.drawWichtel(nc, d.x, outY, 0, Anim.IDLE, 0, 0f)
                 }
-                drawOverlays(nc, plan, sel, k, density)
+                drawOverlays(nc, plan, sel, k, density, layer, activeStep)
                 nc.restore()
             }
         }
     }
 }
 
-private fun drawOverlays(nc: android.graphics.Canvas, plan: Plan, sel: Sel, k: Float, density: Float) {
+/** Blasse Farbe für gesperrte (nicht aktive) Ebenen. */
+private fun dim(col: Int, active: Boolean): Int =
+    if (active) col else (col and 0x00FFFFFF) or ((((col ushr 24) and 0xFF) * 0.35f).toInt() shl 24)
+
+private fun drawOverlays(nc: android.graphics.Canvas, plan: Plan, sel: Sel, k: Float, density: Float, layer: Layer, activeStep: Int) {
     val px = 1f / k            // 1 Bildschirm-Pixel in Foto-Pixeln
     val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
@@ -176,16 +183,20 @@ private fun drawOverlays(nc: android.graphics.Canvas, plan: Plan, sel: Sel, k: F
 
     // Horizont
     if (plan.view == ViewMode.SIDE) {
+        val act = layer == Layer.HORIZON
         val on = sel == Sel.Horizon
-        line.color = if (on) 0xFFFFEB3B.toInt() else 0xAAFFFFFF.toInt()
+        line.color = dim(if (on) 0xFFFFEB3B.toInt() else 0xAAFFFFFF.toInt(), act)
         line.strokeWidth = (if (on) 3f else 1.5f) * density * px
         line.pathEffect = DashPathEffect(floatArrayOf(14f * density * px, 8f * density * px), 0f)
         nc.drawLine(0f, plan.horizon, plan.width.toFloat(), plan.horizon, line)
         line.pathEffect = null
+        text.color = dim(0xFFFFFFFF.toInt(), act)
         nc.drawText("Horizont", 6f * density * px, plan.horizon - 5f * density * px, text)
+        text.color = 0xFFFFFFFF.toInt()
     }
 
     // Gegenstände
+    val objAct = layer == Layer.OBJECTS
     for (o in plan.objects) {
         val on = sel == Sel.Obj(o.id)
         val col = typeColor(o.type)
@@ -193,8 +204,8 @@ private fun drawOverlays(nc: android.graphics.Canvas, plan: Plan, sel: Sel, k: F
         nc.translate(o.x, o.y)
         nc.rotate(o.rot)
         val r = RectF(-o.w / 2f, -o.h / 2f, o.w / 2f, o.h / 2f)
-        fill.color = (col and 0x00FFFFFF) or 0x40000000
-        line.color = col
+        fill.color = dim((col and 0x00FFFFFF) or 0x40000000, objAct)
+        line.color = dim(col, objAct)
         line.strokeWidth = (if (on) 3.5f else 2f) * density * px
         if (o.shape == ShapeKind.OVAL) {
             nc.drawOval(r, fill)
@@ -206,43 +217,61 @@ private fun drawOverlays(nc: android.graphics.Canvas, plan: Plan, sel: Sel, k: F
         // Standfläche, die der Wichtel nicht betreten darf
         val f = o.footprintLocal(plan.view)
         if (f != null) {
-            line.color = 0xCCFF1744.toInt()
+            line.color = dim(0xCCFF1744.toInt(), objAct)
             line.strokeWidth = 1.5f * density * px
             line.pathEffect = DashPathEffect(floatArrayOf(6f * density * px, 4f * density * px), 0f)
             nc.drawRect(f[0], f[1], f[2], f[3], line)
             line.pathEffect = null
         }
+        text.color = dim(0xFFFFFFFF.toInt(), objAct)
         nc.drawText(o.type.label, -o.w / 2f + 4f * density * px, -o.h / 2f + 15f * density * px, text)
+        text.color = 0xFFFFFFFF.toInt()
         nc.restore()
     }
 
     // Tür
+    val doorAct = layer == Layer.DOOR
     val d = plan.door
     nc.save()
     nc.translate(d.x, d.y)
     nc.rotate(d.rot)
     val dOn = sel == Sel.Door
-    line.color = if (dOn) 0xFFFFEB3B.toInt() else 0x99FFFFFF.toInt()
+    line.color = dim(if (dOn) 0xFFFFEB3B.toInt() else 0x99FFFFFF.toInt(), doorAct)
     line.strokeWidth = (if (dOn) 3f else 1.2f) * density * px
     nc.drawRect(-d.w / 2f, -d.h, d.w / 2f, 0f, line)
     // Angelseite markieren
     val hx = if (d.hinge == app.wichtelein2.core.Hinge.LEFT) -d.w / 2f else d.w / 2f
-    fill.color = 0xFFFFEB3B.toInt()
+    fill.color = dim(0xFFFFEB3B.toInt(), doorAct)
     nc.drawCircle(hx, -d.h * 0.25f, 5f * density * px, fill)
     nc.drawCircle(hx, -d.h * 0.75f, 5f * density * px, fill)
     nc.restore()
 
-    // Schritt-Orte
+    // Schritt-Orte; bei Leiter/Treppe der Pfad (unten → oben) als Linie mit Pfeilspitze
+    val stepsAct = layer == Layer.STEPS
     plan.steps.forEachIndexed { i, st ->
-        val at = st.at ?: return@forEachIndexed
-        val on = sel == Sel.StepAt(i)
-        fill.color = if (on) 0xFFFFEB3B.toInt() else 0xFF1E88E5.toInt()
-        nc.drawCircle(at.x, at.y, 13f * density * px, fill)
-        text.color = if (on) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
-        text.textAlign = Paint.Align.CENTER
-        nc.drawText("${i + 1}", at.x, at.y + 5f * density * px, text)
-        text.textAlign = Paint.Align.LEFT
-        text.color = 0xFFFFFFFF.toInt()
+        val (at, to) = EditOps.stepPoints(plan, st)
+        val cur = stepsAct && i == activeStep
+        if (at != null && to != null) {
+            line.color = dim(if (cur) 0xFFFFEB3B.toInt() else 0xFF1E88E5.toInt(), cur)
+            line.strokeWidth = (if (cur) 4f else 2.5f) * density * px
+            nc.drawLine(at.x, at.y, to.x, to.y, line)
+            val ang = Math.atan2((to.y - at.y).toDouble(), (to.x - at.x).toDouble())
+            val ah = 12f * density * px
+            for (da in doubleArrayOf(2.6, -2.6)) {
+                nc.drawLine(to.x, to.y, (to.x + ah * Math.cos(ang + da)).toFloat(), (to.y + ah * Math.sin(ang + da)).toFloat(), line)
+            }
+        }
+        fun marker(pt: Pt, label: String, on: Boolean) {
+            fill.color = dim(if (on) 0xFFFFEB3B.toInt() else 0xFF1E88E5.toInt(), cur)
+            nc.drawCircle(pt.x, pt.y, 13f * density * px, fill)
+            text.color = dim(if (on) 0xFF000000.toInt() else 0xFFFFFFFF.toInt(), cur)
+            text.textAlign = Paint.Align.CENTER
+            nc.drawText(label, pt.x, pt.y + 5f * density * px, text)
+            text.textAlign = Paint.Align.LEFT
+            text.color = 0xFFFFFFFF.toInt()
+        }
+        if (at != null) marker(at, "${i + 1}", sel == Sel.StepAt(i))
+        if (to != null) marker(to, "${i + 1}↑", sel == Sel.StepTo(i))
     }
 
     // Griff zum Ändern der Größe
