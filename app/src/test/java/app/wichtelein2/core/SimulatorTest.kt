@@ -268,7 +268,7 @@ class SimulatorTest {
 
     @Test
     fun ladderClimbsUpStaysThenComesDownBeforeTheNextStep() {
-        val p = base(steps = listOf(Step(ActionType.LADDER, objectId = 5, seconds = 1f), Step(ActionType.SWEEP, at = Pt(400f, 800f), seconds = 1f)), objs = listOf(ladder()))
+        val p = base(steps = listOf(Step(ActionType.LADDER, objectId = 5, seconds = 1f), Step(ActionType.HIDE, seconds = 1f)), objs = listOf(ladder()))
         val s = Simulator(p).run()
         val path = EditOps.climbPath(p, p.steps[0])!!
         val climb = s.frames.filter { it.anim == Anim.CLIMB }
@@ -282,12 +282,12 @@ class SimulatorTest {
         }
         // senkrecht, Blick zur Leiter (weg vom Betrachter)
         assertTrue(climb.all { it.dir == 4 })
-        // Fegen an einem anderen Ort: erst hinuntersteigen
+        // Verstecken in der Tür: erst hinuntersteigen, dann zur Tür
         val lastClimb = s.frames.indexOfLast { it.anim == Anim.CLIMB }
-        val firstSweep = s.frames.indexOfFirst { it.anim == Anim.SWEEP }
-        assertTrue(lastClimb < firstSweep)
+        val enter = s.frames.indexOfFirst { it.step == 1 && it.houseT > 0.01f }
+        assertTrue(lastClimb < enter)
         assertEquals(path.first.y, s.frames[lastClimb].y, 2f)
-        assertEquals(-1, s.frames[firstSweep].ignore)
+        assertEquals(-1, s.frames[enter].ignore)
         assertEquals(1f, s.frames.last().houseT, 0.001f)
     }
 
@@ -329,11 +329,11 @@ class SimulatorTest {
     }
 
     @Test
-    fun missingLadderGivesWarningAndStillEndsInside() {
+    fun climbWithoutAnyObjectUsesTheStepPointsAndEndsInside() {
         val p = base(steps = listOf(Step(ActionType.LADDER), Step(ActionType.SWEEP, seconds = 1f)))
         val s = Simulator(p).run()
-        assertTrue(s.warnings.any { it.contains("Leiter") })
-        assertTrue(s.frames.none { it.anim == Anim.CLIMB })
+        assertTrue(s.warnings.none { it.contains("Keine") })
+        assertTrue(s.frames.any { it.anim == Anim.CLIMB })
         assertEquals(1f, s.frames.last().houseT, 0.001f)
     }
 
@@ -361,7 +361,7 @@ class SimulatorTest {
         // Zweites Fegen oben: auf der Leiter/Treppe, ohne vorher aus der Tür zu kommen
         val top = sim.frames.filter { it.step == 3 && it.anim == Anim.SWEEP }
         assertTrue("fegt", top.size > 30)
-        assertTrue("fegt oben", top.all { it.ignore >= 0 })
+        assertTrue("fegt oben", top.all { it.ignore != -1 })
     }
 
     @Test
@@ -370,7 +370,7 @@ class SimulatorTest {
         assertTrue(sim.warnings.none { it.contains("Keine") })
         val top = sim.frames.filter { it.step == 3 }
         val first = top.first()
-        assertTrue("Fegen beginnt oben", first.ignore >= 0)
+        assertTrue("Fegen beginnt oben", first.ignore != -1)
         assertTrue("danach geht er hinunter und heim", sim.frames.last().houseT > 0.99f)
     }
 
@@ -393,5 +393,39 @@ class SimulatorTest {
         }
         assertEquals("Türdurchgänge: heraus, hinein, heraus, hinein", 4, opens)
         assertTrue("Tür bleibt zwischen zwei Durchgängen mindestens 0,4 s zu (war $minGap)", minGap >= 0.4f)
+    }
+
+    @Test
+    fun sweepingAndScaringOnTopStayOnTheUpperPointEvenWithAGroundPointSet() {
+        val a = Pt(400f, 800f)
+        val b = Pt(900f, 450f)
+        val steps = listOf(
+            Step(ActionType.STAIRS, at = a, to = b, up = true, seconds = 1f),
+            Step(ActionType.SWEEP, at = Pt(300f, 900f), seconds = 2f),
+            Step(ActionType.STAIRS, at = Pt(1f, 1f), to = Pt(2f, 2f), up = false),
+        )
+        val s = Simulator(base(steps = steps)).run()
+        val sweep = s.frames.filter { it.step == 1 && it.anim == Anim.SWEEP }
+        assertTrue(sweep.size > 30)
+        for (f in sweep) {
+            assertEquals(b.x, f.x, 1f)
+            assertEquals(b.y, f.y, 1f)
+            assertTrue(f.ignore != -1)
+        }
+        // „Hinunter“ nimmt den Pfad, auf dem er steht, nicht die eigenen Punkte des Schritts
+        val down = s.frames.filter { it.step == 2 && it.anim == Anim.STAIRS }
+        assertTrue(down.isNotEmpty())
+        assertEquals(a.x, down.last().x, 6f)
+    }
+
+    @Test
+    fun climbStartsExactlyAtPointAEvenAboveTheHorizon() {
+        val p = base(steps = listOf(Step(ActionType.STAIRS, at = Pt(500f, 300f), to = Pt(900f, 150f), seconds = 1f)))
+        val s = Simulator(p).run()
+        val climb = s.frames.filter { it.anim == Anim.STAIRS }
+        assertTrue(climb.isNotEmpty())
+        // kein Sprung: aufeinanderfolgende Bilder liegen nahe beieinander
+        for (i in 1 until climb.size) assertTrue(Math.hypot((climb[i].x - climb[i - 1].x).toDouble(), (climb[i].y - climb[i - 1].y).toDouble()) < 25.0)
+        assertEquals(900f, climb.maxOf { it.x }, 1f)
     }
 }

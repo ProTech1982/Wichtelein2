@@ -54,7 +54,8 @@ object EditOps {
         is Sel.StepAt -> p.copy(steps = p.steps.mapIndexed { i, st ->
             if (i == s.index) {
                 val c = st.at ?: stepDefault(p, st, false)
-                st.copy(at = Pt(clampX(p, c.x + dx), clampY(p, c.y + dy)))
+                val np = Pt(clampX(p, c.x + dx), clampY(p, c.y + dy))
+                st.copy(at = if (st.action.isClimb) np else snapGround(p, np))
             } else st
         })
         is Sel.StepTo -> p.copy(steps = p.steps.mapIndexed { i, st ->
@@ -122,9 +123,47 @@ object EditOps {
         val a = s.at
         val b = s.to
         if (a != null && b != null) return Pair(a, b)
-        val o = climbObject(p, s, near) ?: return null
-        val auto = autoClimbPath(o, if (o.type == ObjType.LADDER) ActionType.LADDER else ActionType.STAIRS)
+        val o = climbObject(p, s, near)
+        val auto = if (o != null) autoClimbPath(o, if (o.type == ObjType.LADDER) ActionType.LADDER else ActionType.STAIRS) else climbDefaultPoints(p, s.action)
         return Pair(a ?: auto.first, b ?: auto.second)
+    }
+
+    /** Vorgabe für Punkt A (unten) und B (oben): am Gegenstand, falls einer markiert ist, sonst links im Bild, Treppe schräg nach rechts oben. */
+    fun climbDefaultPoints(p: Plan, a: ActionType): Pair<Pt, Pt> {
+        p.objects.firstOrNull { it.type == a.climbType }?.let { return autoClimbPath(it, a) }
+        val gy = if (p.view == ViewMode.SIDE) p.horizon + (p.height - p.horizon) * 0.5f else p.height * 0.55f
+        val ax = p.width * 0.3f
+        val top = if (a == ActionType.LADDER) Pt(ax, gy - 0.28f * p.height) else Pt(ax + 0.25f * p.width, gy - 0.16f * p.height)
+        return Pair(Pt(clampX(p, ax), clampY(p, gy)), Pt(clampX(p, top.x), clampY(p, top.y)))
+    }
+
+    /** Treppe nach rechts oder links ansteigen lassen: A bleibt, B wandert auf die andere Seite von A. */
+    fun setStairsSlope(p: Plan, i: Int, right: Boolean): Plan {
+        val st = p.steps.getOrNull(i) ?: return p
+        val (a, b) = climbPath(p, st) ?: return p
+        val dx = max(abs(b.x - a.x), 0.12f * p.width)
+        val nx = clampX(p, a.x + if (right) dx else -dx)
+        return updateStep(p, i) { it.copy(at = a, to = Pt(nx, b.y)) }
+    }
+
+    /** Steht der Wichtel vor Schritt i oben auf Leiter/Treppe? (Fegen/Erschrecken geschehen dann dort oben.) */
+    fun onTopAt(p: Plan, i: Int): Boolean {
+        var up = false
+        for (k in 0 until i.coerceAtMost(p.steps.size)) {
+            val s = p.steps[k]
+            if (s.action.isClimb) up = s.up
+            else if (s.action == ActionType.HIDE || s.action == ActionType.SCARE) up = false
+        }
+        return up
+    }
+
+    /** Nächster begehbarer Bodenpunkt (Seitenansicht: unter dem Horizont, nicht in Standflächen). */
+    fun snapGround(p: Plan, pt: Pt): Pt = NavGrid(p).nearestFree(pt)
+
+    /** Ort bzw. Pfadende eines Schritts setzen; Orte am Boden rasten auf begehbaren Boden ein, damit der Punkt dort liegt, wo er steht. */
+    fun placeStepPoint(p: Plan, i: Int, pt: Pt, top: Boolean): Plan {
+        val st = p.steps.getOrNull(i) ?: return p
+        return updateStep(p, i) { if (top) it.copy(to = pt) else if (st.action.isClimb) it.copy(at = pt) else it.copy(at = snapGround(p, pt)) }
     }
 
     /** Startpunkt, wenn ein Schritt noch keinen eigenen Ort hat und einer gesetzt wird. */
@@ -181,8 +220,10 @@ object EditOps {
             ActionType.SWEEP -> Step(a, seconds = 6f)
             ActionType.HIDE -> Step(a, retreat = if (firstHide != null) Retreat.OBJECT else Retreat.DOOR, objectId = firstHide?.id ?: -1, seconds = 4f)
             ActionType.SCARE -> Step(a, retreat = Retreat.DOOR, objectId = firstHide?.id ?: -1, seconds = 4f)
-            ActionType.LADDER, ActionType.STAIRS ->
-                Step(a, objectId = p.objects.firstOrNull { it.type == a.climbType }?.id ?: -1, seconds = 2f)
+            ActionType.LADDER, ActionType.STAIRS -> {
+                val pts = climbDefaultPoints(p, a)
+                Step(a, at = pts.first, to = pts.second, seconds = 2f)
+            }
         }
         return p.copy(steps = p.steps + st)
     }

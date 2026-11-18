@@ -55,7 +55,7 @@ object DebugReport {
         var lines = 0
         var key = ""
         for (fr in sim.frames) {
-            val k = "${fr.step}|${fr.anim}|${place(fr.houseT)}|${doorState(fr.doorOpen)}|${fr.ignore >= 0}"
+            val k = "${fr.step}|${fr.anim}|${place(fr.houseT)}|${doorState(fr.doorOpen)}|${fr.ignore != -1}"
             if (k == key) continue
             key = k
             if (lines++ >= maxLines) {
@@ -65,7 +65,7 @@ object DebugReport {
             val stepTxt = if (fr.step >= 0) (fr.step + 1).toString() else "-"
             sb.appendLine(
                 "${s2(fr.t)} | $stepTxt | ${fr.anim} | ${place(fr.houseT)} | ${doorState(fr.doorOpen)} | " +
-                    (if (fr.ignore >= 0) "ja (#${fr.ignore})" else "nein") + " | ${f(fr.x)}, ${f(fr.y)}",
+                    (if (fr.ignore != -1) "ja" else "nein") + " | ${f(fr.x)}, ${f(fr.y)}",
             )
         }
         sb.appendLine()

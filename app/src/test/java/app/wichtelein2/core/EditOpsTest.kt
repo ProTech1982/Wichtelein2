@@ -130,14 +130,14 @@ class EditOpsTest {
         p = EditOps.addStep(p, ActionType.LADDER)
         val idx = p.steps.size - 1
         val st = p.steps[idx]
-        assertEquals(p.objects[0].id, st.objectId)
+        assertTrue("Punkte A und B sind gesetzt", st.at != null && st.to != null)
         assertTrue(st.up)
         val (a, b) = EditOps.climbPath(p, st)!!
         assertTrue("oben liegt über unten", b.y < a.y)
         // Verschieben des oberen Endes geht vom automatischen Pfad aus; das untere bleibt automatisch
         val q = EditOps.move(p, Sel.StepTo(idx), 10f, 0f)
         assertEquals(b.x + 10f, q.steps[idx].to!!.x, 0.01f)
-        assertNull(q.steps[idx].at)
+        assertEquals(a.x, q.steps[idx].at!!.x, 0.01f)
         // beide Enden sind im Foto anfassbar, ein anderer Schritt/anderes Bauteil nicht
         assertEquals(Sel.StepAt(idx), EditOps.hit(q, a, 5f, Layer.STEPS))
         assertEquals(Sel.StepTo(idx), EditOps.hit(q, q.steps[idx].to!!, 5f, Layer.STEPS))
@@ -180,11 +180,12 @@ class EditOpsTest {
     @Test
     fun movingAStepNeverTouchesOtherSteps() {
         var p = EditOps.addStep(EditOps.addStep(p0, ActionType.SCARE), ActionType.SWEEP)
-        p = EditOps.updateStep(p, 0) { it.copy(at = Pt(100f, 100f)) }
+        val gy = p0.horizon + 200f
+        p = EditOps.updateStep(p, 0) { it.copy(at = Pt(100f, gy)) }
         p = EditOps.updateStep(p, 1) { it.copy(at = Pt(300f, 300f)) }
         p = EditOps.updateStep(p, 2) { it.copy(at = Pt(500f, 500f)) }
         val q = EditOps.move(p, Sel.StepAt(0), 20f, 0f)
-        assertEquals(Pt(120f, 100f), q.steps[0].at)
+        assertEquals(Pt(120f, gy), q.steps[0].at)
         assertEquals(Pt(300f, 300f), q.steps[1].at)
         assertEquals(Pt(500f, 500f), q.steps[2].at)
     }
@@ -198,5 +199,35 @@ class EditOpsTest {
         assertTrue(b.x < a.x && b.y < a.y)
         val q = p.copy(steps = listOf(Step(ActionType.STAIRS, at = a, to = b)))
         assertTrue("nach links", !EditOps.stairsRiseRight(q, o))
+    }
+
+    @Test
+    fun groundPointsSnapToWalkableGroundButClimbPointsStayWhereTheyAre() {
+        val p = Plan.default(1600, 1000).copy(steps = listOf(Step(ActionType.SWEEP), Step(ActionType.STAIRS)))
+        // Fegen: ein Punkt über dem Horizont rutscht auf den Boden darunter
+        val q = EditOps.placeStepPoint(p, 0, Pt(500f, p.horizon - 150f), false)
+        assertTrue("liegt unter dem Horizont: ${q.steps[0].at}", q.steps[0].at!!.y >= p.horizon)
+        // Treppe: A und B sind frei setzbar
+        val r = EditOps.placeStepPoint(q, 1, Pt(500f, p.horizon - 150f), false)
+        assertEquals(p.horizon - 150f, r.steps[1].at!!.y, 0.01f)
+    }
+
+    @Test
+    fun stairsSlopeKeepsAAndMovesBToTheOtherSide() {
+        var p = Plan.default(1600, 1000).copy(steps = listOf(Step(ActionType.STAIRS)))
+        p = EditOps.addStep(p, ActionType.STAIRS)
+        val a = p.steps[1].at!!
+        val left = EditOps.setStairsSlope(p, 1, false)
+        assertEquals(a, left.steps[1].at)
+        assertTrue(left.steps[1].to!!.x < a.x)
+        val right = EditOps.setStairsSlope(left, 1, true)
+        assertTrue(right.steps[1].to!!.x > a.x)
+    }
+
+    @Test
+    fun onTopAfterClimbingUpUntilDownHideOrScare() {
+        val steps = listOf(Step(ActionType.SWEEP), Step(ActionType.STAIRS, up = true), Step(ActionType.SWEEP), Step(ActionType.SCARE), Step(ActionType.SWEEP))
+        val p = Plan.default(1600, 1000).copy(steps = steps)
+        assertEquals(listOf(false, false, true, true, false), (0 until 5).map { EditOps.onTopAt(p, it) })
     }
 }

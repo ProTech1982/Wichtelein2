@@ -16,7 +16,7 @@ class DebugReportTest {
         assertTrue(r.contains("Gegenstand #1 Haus"))
         assertTrue(r.contains("Schritt 2: Treppe"))
         assertTrue(r.contains("== Warnungen =="))
-        assertTrue(r.contains("Keine Treppe markiert"))
+        assertTrue(r.contains("keine"))
         assertTrue(r.contains("== Zeitleiste"))
         assertTrue(r.contains("SWEEP"))
         assertTrue(r.contains("in der Tür"))

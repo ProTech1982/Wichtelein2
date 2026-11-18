@@ -143,7 +143,7 @@ class UiTest {
         rule.onNodeWithTag("btn_take_photo").assertIsDisplayed()
         rule.onNodeWithTag("btn_continue").assertIsDisplayed()
         rule.onNodeWithTag("btn_settings").assertIsDisplayed()
-        rule.onNodeWithText("Version 0.3.4").assertIsDisplayed()
+        rule.onNodeWithText("Version 0.3.5").assertIsDisplayed()
         rule.onNodeWithTag("btn_backgrounds").assertIsDisplayed()
         rule.onNodeWithTag("btn_home_music").assertIsDisplayed()
         rule.onNodeWithTag("btn_ar").assertIsDisplayed()
@@ -466,37 +466,42 @@ class UiTest {
     }
 
     @Test
-    fun ladderAndStairsStepsHaveDirectionAndPath() {
+    fun ladderAndStairsStepsNeedOnlyPointsAAndB() {
         openEditor()
+        // Leiter und Treppe gibt es nicht mehr als markierbare Gegenstände
         tab(1)
-        tap("add_ladder")
-        tap("add_stairs")
-        val p0 = awaitPlan("Leiter und Treppe") { it.objects.size == 2 }
+        rule.onNodeWithTag("add_tree").assertIsDisplayed()
+        assertTrue("kein Leiter-Gegenstand zum Anlegen", !has("add_ladder") && !has("add_stairs"))
         tab(2)
         tap("add_step_ladder")
         tap("add_step_stairs")
         var p = awaitPlan("zwei Schritte") { it.steps.size == 3 }
         assertEquals(ActionType.LADDER, p.steps[1].action)
         assertEquals(ActionType.STAIRS, p.steps[2].action)
-        assertEquals(p0.objects[0].id, p.steps[1].objectId)
-        assertEquals(p0.objects[1].id, p.steps[2].objectId)
-        // Treppe: hinunter wählen und das obere Ende des Pfads mit den Pfeilen versetzen
+        assertTrue("Punkte A und B sind gleich gesetzt", p.steps[1].at != null && p.steps[1].to != null && p.steps[2].at != null && p.steps[2].to != null)
+        // Treppe: hinunter wählen und Punkt B mit den Pfeilen versetzen
+        val before = p.steps[2].to!!
         tap("step_dir_down")
         tap("step_path_top")
         tap("pad_right")
         tap("pad_right")
-        p = awaitPlan("Treppe hinunter mit eigenem Pfad") { !it.steps[2].up && it.steps[2].to != null }
+        p = awaitPlan("Treppe hinunter, B versetzt") { !it.steps[2].up && it.steps[2].to!!.x > before.x + 1f }
         assertTrue("Leiter bleibt hinauf", p.steps[1].up)
-        assertNotNull(p.steps[2].to)
-        assertEquals(null, p.steps[2].at)
-        // Wieder automatisch
+        // Zurücksetzen
         tap("step_auto_path")
-        awaitPlan("Pfad automatisch") { it.steps[2].to == null && it.steps[2].at == null }
+        awaitPlan("Punkte zurückgesetzt") { Math.abs(it.steps[2].to!!.x - before.x) < 0.5f }
         // Steigung der Treppe: nach links hoch, dann wieder nach rechts
         tap("stairs_left")
-        p = awaitPlan("Treppe steigt nach links") { it.steps[2].at != null && it.steps[2].to!!.x < it.steps[2].at!!.x }
+        p = awaitPlan("Treppe steigt nach links") { it.steps[2].to!!.x < it.steps[2].at!!.x }
         tap("stairs_right")
-        awaitPlan("Treppe steigt nach rechts") { it.steps[2].to != null && it.steps[2].to!!.x > it.steps[2].at!!.x }
+        awaitPlan("Treppe steigt nach rechts") { it.steps[2].to!!.x > it.steps[2].at!!.x }
+        // Danach ein Fegen: der Hinweis erklärt, dass es oben stattfindet
+        tap("add_step_sweep")
+        awaitPlan("Fegen dazu") { it.steps.size == 4 }
+        tap("step_chip_2")
+        tap("step_dir_up")
+        tap("step_chip_3")
+        rule.waitUntil(5_000) { has("on_top_hint") }
         shot("ui_editor_treppe")
     }
 

@@ -33,11 +33,11 @@ object HelpTexts {
 
     const val OBJECTS_TITLE = "Objekte"
     const val OBJECTS =
-        "Objekte sind Dinge aus deinem Foto, die du mit einem Kasten oder Oval markierst (Bett, Baum, Haus, Leiter …). " +
+        "Objekte sind Dinge aus deinem Foto, die du mit einem Kasten oder Oval markierst (Bett, Baum, Haus …). " +
             "Markieren malt nichts ins Foto, sondern sagt dem Wichtel, was da ist:\n\n" +
             "• Rot gestrichelt = Standfläche: Dort läuft der Wichtel nicht hinein, er geht außen herum (Wegfindung).\n" +
             "• Verstecken: Er kann sich hinter markierten Dingen verstecken. Geht er hinter ihnen entlang, deckt ein Ausschnitt aus deinem Foto ihn zu.\n" +
-            "• Gras bremst ihn nur, Leiter und Treppe kann er hinauf- und hinuntersteigen (Tab „Ablauf“).\n\n" +
+            "• Gras bremst ihn nur. Leiter und Treppe brauchen keinen Kasten: Sie legst du im Tab „Ablauf“ mit zwei Punkten fest.\n\n" +
             "Tippe ein Objekt an, um es zu bearbeiten. Nur das gewählte Objekt lässt sich ziehen, alle anderen sind gesperrt. " +
             "Unter „Markiert“ siehst du eine Erklärung, was das gewählte Objekt in der aktuellen Ansicht (seitlich oder von oben) bewirkt."
 
@@ -47,8 +47,10 @@ object HelpTexts {
             "• Tippe unten auf die Nummer eines Schritts, um genau diesen zu bearbeiten. Pfeile und „Verschieben“ gelten immer für den gewählten Schritt.\n" +
             "• Fegen / Erschrecken: Mit „Im Foto wählen“ legst du den Ort fest (Nummernkreis im Foto).\n" +
             "• Verstecken / Flucht: in die Tür oder hinter einen markierten Gegenstand.\n" +
-            "• Leiter / Treppe: Pfad von unten nach oben. Wähle „Hinauf“ oder „Hinunter“ und stelle unten und oben im Foto ein. " +
-            "Bei „Hinunter“ steigt der Wichtel erst hinauf, falls er noch unten steht. Folgt danach ein anderer Schritt, steigt er automatisch wieder hinab.\n" +
+            "• Leiter / Treppe: Du setzt Punkt A (unten) und Punkt B (oben) im Foto, mehr nicht. Bei der Treppe wählst du, ob sie nach links oder rechts ansteigt. " +
+            "Nach „Hinauf“ bleibt der Wichtel oben auf der Linie A–B: Ein folgendes Fegen oder Erschrecken passiert dort oben. " +
+            "Erst „Hinunter“, Verstecken oder die Flucht bringen ihn wieder nach unten.\n" +
+            "• Orte am Boden (Fegen, Erschrecken) liegen immer auf begehbarem Boden unter der Horizontlinie. Setzt du einen Punkt weiter oben, rutscht er dorthin, wo der Wichtel wirklich steht.\n" +
             "• Mit ↑ Früher / ↓ Später änderst du die Reihenfolge."
 
     const val VIEW_TITLE = "Ansicht"

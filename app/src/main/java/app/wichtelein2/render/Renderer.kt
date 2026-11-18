@@ -173,7 +173,7 @@ class Renderer(
 
     @Suppress("DEPRECATION")
     private fun drawOccluders(canvas: Canvas, f: Frame) {
-        if (f.ignore >= 0) return   // auf Leiter/Treppe: er steht vor der Wand, nichts deckt ihn zu
+        if (f.ignore != -1) return   // auf Leiter/Treppe: er steht vor der Wand, nichts deckt ihn zu
         val foot = Pt(f.x, f.y)
         val doorMid = Pt(plan.door.x, plan.door.y - plan.door.h / 2f)
         for (o in plan.objects) {

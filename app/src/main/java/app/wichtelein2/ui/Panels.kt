@@ -210,7 +210,7 @@ fun ObjectsPanel(plan: Plan, sel: Sel, onSel: (Sel) -> Unit, onPlan: (Plan) -> U
             fontSize = 12.sp,
         )
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ObjType.entries.forEach { t ->
+            ObjType.entries.filter { it != ObjType.LADDER && it != ObjType.STAIRS }.forEach { t ->
                 OutlinedButton(
                     onClick = {
                         val q = EditOps.addObject(plan, t)
@@ -298,7 +298,10 @@ fun StepsPanel(
                             val t = it.copy(action = a)
                             // Gegenstand und Pfad gehören zur Aktion: beim Wechsel zwischen Leiter/Treppe/anderem zurücksetzen
                             if (a.isClimb != it.action.isClimb || (a.isClimb && a != it.action)) {
-                                t.copy(at = null, to = null, objectId = plan.objects.firstOrNull { o -> a.isClimb && o.type == a.climbType }?.id ?: -1)
+                                if (a.isClimb) {
+                                    val pts = EditOps.climbDefaultPoints(plan, a)
+                                    t.copy(at = pts.first, to = pts.second, objectId = -1)
+                                } else t.copy(at = null, to = null, objectId = -1)
                             } else t
                         })
                         onSel(Sel.None)
@@ -328,7 +331,15 @@ fun StepsPanel(
                 }
             }
         }
-        if (st.action == ActionType.SWEEP || st.action == ActionType.SCARE) {
+        if ((st.action == ActionType.SWEEP || st.action == ActionType.SCARE) && EditOps.onTopAt(plan, i)) {
+            Text(
+                "Der Wichtel steht hier oben auf der Leiter/Treppe (Punkt B): ${st.action.label} findet dort statt, der Ort wird nicht gebraucht. " +
+                    "Erst ein Schritt „Hinunter“ oder Verstecken/Flucht bringt ihn wieder nach unten.",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.testTag("on_top_hint"),
+            )
+        }
+        if ((st.action == ActionType.SWEEP || st.action == ActionType.SCARE) && !EditOps.onTopAt(plan, i)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(if (st.action == ActionType.SWEEP) "Fegeort:" else "Ort des Schrecks:", fontSize = 13.sp)
                 OutlinedButton(onClick = { onPickPoint(i, false) }, modifier = Modifier.testTag("step_pick_point")) {
@@ -347,48 +358,27 @@ fun StepsPanel(
                 FilterChip(st.up, { onPlan(EditOps.updateStep(plan, i) { it.copy(up = true) }) }, { Text("▲ Hinauf (unten → oben)") }, modifier = Modifier.testTag("step_dir_up"))
                 FilterChip(!st.up, { onPlan(EditOps.updateStep(plan, i) { it.copy(up = false) }) }, { Text("▼ Hinunter (oben → unten)") }, modifier = Modifier.testTag("step_dir_down"))
             }
-            val cands = plan.objects.filter { it.type == st.action.climbType }
-            if (cands.isEmpty()) {
-                Text("Noch keine $what markiert – im Tab „Objekte“ „+ $what“ anlegen oder den Pfad im Foto selbst setzen.", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
-            } else {
-                Text("$what im Foto:", fontSize = 13.sp)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    cands.forEach { o ->
-                        FilterChip(
-                            EditOps.climbObject(plan, st)?.id == o.id,
-                            { onPlan(EditOps.updateStep(plan, i) { it.copy(objectId = o.id, at = null, to = null) }); onSel(Sel.None) },
-                            { Text("${o.type.label} ${plan.objects.indexOf(o) + 1}") },
-                            modifier = Modifier.testTag("step_obj_${o.id}"),
-                        )
-                    }
-                }
-            }
+            Text("$what: Punkt A (unten) und Punkt B (oben) legst du im Foto fest, ein Gegenstand ist nicht nötig.", fontSize = 12.sp)
             if (st.action == ActionType.STAIRS) {
-                val so = EditOps.climbObject(plan, st)
-                if (so != null) {
-                    Text("Steigung der Treppe", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                    val right = EditOps.stairsRiseRight(plan, so)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(right, {
-                            val (a, b) = EditOps.autoClimbPath(so, ActionType.STAIRS)
-                            onPlan(EditOps.updateStep(plan, i) { it.copy(at = a, to = b) })
-                        }, { Text("↗ nach rechts hoch") }, modifier = Modifier.testTag("stairs_right"))
-                        FilterChip(!right, {
-                            val (a, b) = EditOps.mirroredStairsPath(so)
-                            onPlan(EditOps.updateStep(plan, i) { it.copy(at = a, to = b) })
-                        }, { Text("↖ nach links hoch") }, modifier = Modifier.testTag("stairs_left"))
-                    }
+                val pts = EditOps.climbPath(plan, st)
+                val right = pts == null || pts.second.x >= pts.first.x
+                Text("Steigung der Treppe", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(right, { onPlan(EditOps.setStairsSlope(plan, i, true)) }, { Text("↗ nach rechts hoch") }, modifier = Modifier.testTag("stairs_right"))
+                    FilterChip(!right, { onPlan(EditOps.setStairsSlope(plan, i, false)) }, { Text("↖ nach links hoch") }, modifier = Modifier.testTag("stairs_left"))
                 }
             }
-            Text("Pfad (unten → oben; sonst automatisch am Gegenstand)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text("Punkte A (unten) und B (oben)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedButton(onClick = { onSel(Sel.StepAt(i)) }, modifier = Modifier.testTag("step_path_bottom")) { Text("Unten verschieben") }
-                OutlinedButton(onClick = { onSel(Sel.StepTo(i)) }, modifier = Modifier.testTag("step_path_top")) { Text("Oben verschieben") }
-                OutlinedButton(onClick = { onPickPoint(i, false) }, modifier = Modifier.testTag("step_pick_bottom")) { Text("Unten im Foto wählen") }
-                OutlinedButton(onClick = { onPickPoint(i, true) }, modifier = Modifier.testTag("step_pick_top")) { Text("Oben im Foto wählen") }
-                if (st.at != null || st.to != null) {
-                    OutlinedButton(onClick = { onPlan(EditOps.updateStep(plan, i) { it.copy(at = null, to = null) }); onSel(Sel.None) }, modifier = Modifier.testTag("step_auto_path")) { Text("Pfad automatisch") }
-                }
+                OutlinedButton(onClick = { onSel(Sel.StepAt(i)) }, modifier = Modifier.testTag("step_path_bottom")) { Text("A verschieben") }
+                OutlinedButton(onClick = { onSel(Sel.StepTo(i)) }, modifier = Modifier.testTag("step_path_top")) { Text("B verschieben") }
+                OutlinedButton(onClick = { onPickPoint(i, false) }, modifier = Modifier.testTag("step_pick_bottom")) { Text("A im Foto wählen") }
+                OutlinedButton(onClick = { onPickPoint(i, true) }, modifier = Modifier.testTag("step_pick_top")) { Text("B im Foto wählen") }
+                OutlinedButton(onClick = {
+                    val pts = EditOps.climbDefaultPoints(plan, st.action)
+                    onPlan(EditOps.updateStep(plan, i) { it.copy(at = pts.first, to = pts.second) })
+                    onSel(Sel.None)
+                }, modifier = Modifier.testTag("step_auto_path")) { Text("Zurücksetzen") }
             }
             Text(
                 if (st.action == ActionType.STAIRS) {

@@ -131,7 +131,7 @@ fun EditorScreen(
                     val top = pickTop
                     pickIdx = -1
                     if (i in plan.steps.indices) {
-                        onPlan(EditOps.updateStep(plan, i) { if (top) it.copy(to = p) else it.copy(at = p) })
+                        onPlan(EditOps.placeStepPoint(plan, i, p, top))
                         sel = if (top) Sel.StepTo(i) else Sel.StepAt(i)
                     }
                 },

@@ -24,7 +24,7 @@ enum class Anim(val key: String, val frames: Int) {
  * Ein Bild des Ablaufs. (x, y) = Fußpunkt im Foto, dir = Blickrichtung (0 zum Betrachter, im Uhrzeigersinn je 45°),
  * houseT = 0 draußen .. 1 im Haus (unsichtbar), doorOpen = 0 Tür zu .. 1 ganz offen, step = Index des Schritts (-1 Ein-/Ausgang).
  * refY = Foto-Höhe, nach der die Wichtelgröße berechnet wird (auf Leiter/Treppe fest, sonst = y);
- * ignore = Gegenstand, der den Wichtel nicht verdecken darf (die Leiter/Treppe, auf der er gerade ist), sonst -1.
+ * ignore = -1: normal; sonst steht er auf Leiter/Treppe (Gegenstand-Nr. oder -2 ohne Gegenstand), dann deckt ihn nichts zu.
  */
 data class Frame(
     val t: Float,
@@ -356,8 +356,8 @@ class Simulator(private val plan: Plan, private val fps: Int = 30) {
     }
 
     private fun doSweep(s: Step) {
-        // Steht er auf Leiter/Treppe und es ist kein anderer Ort gesetzt, fegt er dort oben, statt wieder hinunterzugehen
-        val stay = elev != null && s.at == null
+        // Steht er oben auf Leiter/Treppe, fegt er dort oben (der Ort des Schritts wird dann nicht gebraucht)
+        val stay = elev != null
         if (!stay) {
             ensureOutside()
             val target = nav.nearestFree(s.at ?: autoSweepPoint())
@@ -409,7 +409,7 @@ class Simulator(private val plan: Plan, private val fps: Int = 30) {
     }
 
     private fun doScare(s: Step) {
-        if (!(elev != null && s.at == null)) {
+        if (elev == null) {
             ensureOutside()
             walkTo(nav.nearestFree(s.at ?: autoScarePoint()))
         }
@@ -473,7 +473,7 @@ class Simulator(private val plan: Plan, private val fps: Int = 30) {
     private fun doClimb(s: Step) {
         val e0 = elev
         // Steht der Wichtel schon auf der Leiter/Treppe dieses Schritts (z. B. „hinunter“ nach „hinauf“), gilt deren Pfad.
-        val path = if (e0 != null && e0.action == s.action && s.at == null && s.to == null && (s.objectId < 0 || s.objectId == e0.objId)) {
+        val path = if (e0 != null && e0.action == s.action && (!s.up || (s.at == null && s.to == null))) {
             Pair(e0.a, e0.b)
         } else {
             EditOps.climbPath(plan, s, pos)
@@ -487,7 +487,7 @@ class Simulator(private val plan: Plan, private val fps: Int = 30) {
         if (obj != null && obj.type != s.action.climbType) {
             warnings.add("Keine ${s.action.label} markiert (Schritt ${curStep + 1}): ${obj.type.label} wird stattdessen benutzt")
         }
-        val objId = obj?.id ?: e0?.objId ?: -1
+        val objId = obj?.id ?: e0?.objId ?: -2   // -2: auf Leiter/Treppe ohne Gegenstand
         val cur = elev
         if (cur != null && !samePath(cur, a, b)) descend()
         val e = elev ?: Elev(a, b, s.action, objId, a.y)
@@ -495,6 +495,7 @@ class Simulator(private val plan: Plan, private val fps: Int = 30) {
             ensureOutside()
             walkTo(a)
             hold(0.25f, Anim.IDLE, 0f)
+            if (pos.dist(a) > 2f) climbAlong(pos, a, e)   // liegt A nicht auf begehbarem Boden (z. B. über dem Horizont), erst auf A steigen
             climbAlong(a, b, e)               // hinauf (bei „hinunter“ steigt er erst hinauf, damit er oben ankommt)
             hold(if (s.up) max(0.3f, s.seconds) else 0.5f, Anim.IDLE, 0f)
         } else if (s.up) {

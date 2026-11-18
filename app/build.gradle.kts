@@ -14,7 +14,7 @@ android {
         targetSdk = 35
         // Build-Nummer aus GitHub Actions: nötig, damit Updates über die bestehende Installation passen.
         versionCode = (System.getenv("APP_VERSION_CODE") ?: "1").toInt()
-        versionName = "0.3.4"
+        versionName = "0.3.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
