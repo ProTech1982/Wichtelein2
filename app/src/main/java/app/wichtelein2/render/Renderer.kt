@@ -174,8 +174,12 @@ class Renderer(
     @Suppress("DEPRECATION")
     private fun drawOccluders(canvas: Canvas, f: Frame) {
         val foot = Pt(f.x, f.y)
+        val doorMid = Pt(plan.door.x, plan.door.y - plan.door.h / 2f)
         for (o in plan.objects) {
             if (o.id == f.ignore || !occludes(o, foot)) continue   // die Leiter/Treppe, auf der er steht, deckt ihn nicht zu
+            // Das Haus, in dem die Tür sitzt, deckt ihn beim Betreten/Verlassen der Tür nie zu (er steht dabei im Türrahmen)
+            val ownsDoor = o.contains(doorMid)
+            if (ownsDoor && f.houseT > 0.001f) continue
             val m = Matrix()
             m.postRotate(o.rot)
             m.postTranslate(o.x, o.y)
@@ -191,6 +195,11 @@ class Renderer(
             val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN) }
             canvas.drawPath(shape, maskPaint)
             canvas.restoreToCount(layer)
+            // Das Foto-Stück liegt über der Tür: Tür wieder darüberlegen (sie gehört zur Hausfassade)
+            if (ownsDoor) {
+                drawDoorBack(canvas, null, 1f)
+                drawDoorFront(canvas, f.doorOpen)
+            }
         }
     }
 }

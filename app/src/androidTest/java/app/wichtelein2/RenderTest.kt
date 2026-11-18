@@ -229,4 +229,21 @@ class RenderTest {
         val l = TestUtil.diffPixels(base, locked, box[0], box[1], box[2], box[3])
         assertTrue("mit fester Größe füllt er mehr Fläche ($l) als mit Tiefenverkleinerung ($n)", l > n + 600)
     }
+
+    @Test
+    fun houseAroundTheDoorNeverHidesWichtelInTheDoorway() {
+        val sp = SpriteLibrary(ctx)
+        val photo = TestUtil.photo()
+        val d0 = Plan.default(photo.width, photo.height).door
+        val house = SceneObject(1, ObjType.HOUSE, d0.x, d0.y - 60f, 600f, 400f)
+        val plan = Plan.default(photo.width, photo.height).copy(objects = listOf(house), nextId = 2)
+        val foot = (plan.door.y + 20f)
+        assertTrue("Fuß liegt hinter der Hausunterkante", foot < house.baseY)
+        val base = render(plan, photo, sp, frame(plan.door.x, foot, houseT = 0.01f, open = 1f).copy(anim = Anim.IDLE).let { it.copy(x = -500f) })
+        val img = render(plan, photo, sp, frame(plan.door.x, foot, Anim.WALK, 2, 4, houseT = 0.3f, open = 1f))
+        val h = Scaler(plan).heightAt(foot)
+        val changed = TestUtil.diffPixels(base, img, (plan.door.x - h / 2).toInt(), (foot - h).toInt(), (plan.door.x + h / 2).toInt(), foot.toInt())
+        assertTrue("Wichtel im Türrahmen sichtbar, geänderte Pixel: $changed", changed > 800)
+        TestUtil.shot("render_haus_um_tuer", img)
+    }
 }
