@@ -143,7 +143,7 @@ class UiTest {
         rule.onNodeWithTag("btn_take_photo").assertIsDisplayed()
         rule.onNodeWithTag("btn_continue").assertIsDisplayed()
         rule.onNodeWithTag("btn_settings").assertIsDisplayed()
-        rule.onNodeWithText("Version 0.3.0").assertIsDisplayed()
+        rule.onNodeWithText("Version 0.3.1").assertIsDisplayed()
         rule.onNodeWithTag("btn_backgrounds").assertIsDisplayed()
         rule.onNodeWithTag("btn_home_music").assertIsDisplayed()
         rule.onNodeWithTag("btn_ar").assertIsDisplayed()
@@ -346,6 +346,7 @@ class UiTest {
         rule.onNodeWithTag("btn_preview").performClick()
         rule.waitUntil(30_000) { has("preview_canvas") }
         rule.onNodeWithTag("preview_mute").assertIsDisplayed()
+        rule.onNodeWithTag("preview_debug").assertIsDisplayed()
         rule.onNodeWithTag("preview_mute").performClick()
         rule.onNodeWithText("🔇 Ton aus").assertIsDisplayed()
         rule.onNodeWithTag("preview_close").performClick()

@@ -80,7 +80,8 @@ object EditOps {
         if (!s.action.isClimb) return null
         val type = s.action.climbType
         p.objectById(s.objectId)?.let { if (it.type == type) return it }
-        val c = p.objects.filter { it.type == type }
+        // Ist keine passende da (z. B. „Treppe“-Schritt, aber nur eine Leiter markiert), dient die andere Art als Ersatz
+        val c = p.objects.filter { it.type == type }.ifEmpty { p.objects.filter { it.type == ObjType.LADDER || it.type == ObjType.STAIRS } }
         return if (near != null) c.minByOrNull { it.center.dist(near) } else c.firstOrNull()
     }
 
@@ -108,7 +109,7 @@ object EditOps {
         val b = s.to
         if (a != null && b != null) return Pair(a, b)
         val o = climbObject(p, s, near) ?: return null
-        val auto = autoClimbPath(o, s.action)
+        val auto = autoClimbPath(o, if (o.type == ObjType.LADDER) ActionType.LADDER else ActionType.STAIRS)
         return Pair(a ?: auto.first, b ?: auto.second)
     }
 

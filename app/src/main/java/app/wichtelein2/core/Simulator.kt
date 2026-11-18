@@ -225,6 +225,11 @@ class Simulator(private val plan: Plan, private val fps: Int = 30) {
         val out = doorFront()
         pos = d
         heading = 0f
+        // Ist die Tür gerade erst zugegangen, erst ganz zufahren lassen und kurz warten, statt sie sofort wieder aufzureißen
+        if (doorKeys.isNotEmpty()) {
+            while (doorAt(t) > 0.02f) emit(Anim.IDLE, 0, 1f)
+            hold(0.5f, Anim.IDLE, 1f)
+        }
         setDoor(t, 1f)
         hold(0.85f, Anim.IDLE, 1f)
         val n = max(1, Math.round(1.2f * fps))
@@ -350,13 +355,18 @@ class Simulator(private val plan: Plan, private val fps: Int = 30) {
     }
 
     private fun doSweep(s: Step) {
-        ensureOutside()
-        val target = nav.nearestFree(s.at ?: autoSweepPoint())
-        walkTo(target)
+        // Steht er auf Leiter/Treppe und es ist kein anderer Ort gesetzt, fegt er dort oben, statt wieder hinunterzugehen
+        val stay = elev != null && s.at == null
+        if (!stay) {
+            ensureOutside()
+            val target = nav.nearestFree(s.at ?: autoSweepPoint())
+            walkTo(target)
+        }
         hold(0.2f, Anim.IDLE, 0f)
         val hpx = heightAt(pos)
         var a = 0.9f * hpx
         while (a > 0.2f * hpx && (!nav.isFree(Pt(pos.x - a, pos.y)) || !nav.isFree(Pt(pos.x + a, pos.y)))) a *= 0.8f
+        if (stay) a = 0f
         val centerP = pos
         var dirSign = 1f
         val n = max(1, Math.round(max(1f, s.seconds) * fps))
@@ -398,8 +408,10 @@ class Simulator(private val plan: Plan, private val fps: Int = 30) {
     }
 
     private fun doScare(s: Step) {
-        ensureOutside()
-        walkTo(nav.nearestFree(s.at ?: autoScarePoint()))
+        if (!(elev != null && s.at == null)) {
+            ensureOutside()
+            walkTo(nav.nearestFree(s.at ?: autoScarePoint()))
+        }
         heading = 0f
         hold(0.5f, Anim.IDLE, 0f)
         // Schreck: Zusammenzucken, Hände hoch, Beben
@@ -470,7 +482,11 @@ class Simulator(private val plan: Plan, private val fps: Int = 30) {
             return
         }
         val (a, b) = path
-        val objId = EditOps.climbObject(plan, s, pos)?.id ?: e0?.objId ?: -1
+        val obj = EditOps.climbObject(plan, s, pos)
+        if (obj != null && obj.type != s.action.climbType) {
+            warnings.add("Keine ${s.action.label} markiert (Schritt ${curStep + 1}): ${obj.type.label} wird stattdessen benutzt")
+        }
+        val objId = obj?.id ?: e0?.objId ?: -1
         val cur = elev
         if (cur != null && !samePath(cur, a, b)) descend()
         val e = elev ?: Elev(a, b, s.action, objId, a.y)

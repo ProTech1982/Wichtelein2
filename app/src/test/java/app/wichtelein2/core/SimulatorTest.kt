@@ -268,7 +268,7 @@ class SimulatorTest {
 
     @Test
     fun ladderClimbsUpStaysThenComesDownBeforeTheNextStep() {
-        val p = base(steps = listOf(Step(ActionType.LADDER, objectId = 5, seconds = 1f), Step(ActionType.SWEEP, seconds = 1f)), objs = listOf(ladder()))
+        val p = base(steps = listOf(Step(ActionType.LADDER, objectId = 5, seconds = 1f), Step(ActionType.SWEEP, at = Pt(400f, 800f), seconds = 1f)), objs = listOf(ladder()))
         val s = Simulator(p).run()
         val path = EditOps.climbPath(p, p.steps[0])!!
         val climb = s.frames.filter { it.anim == Anim.CLIMB }
@@ -282,7 +282,7 @@ class SimulatorTest {
         }
         // senkrecht, Blick zur Leiter (weg vom Betrachter)
         assertTrue(climb.all { it.dir == 4 })
-        // erst nach dem Hinuntersteigen wird gefegt
+        // Fegen an einem anderen Ort: erst hinuntersteigen
         val lastClimb = s.frames.indexOfLast { it.anim == Anim.CLIMB }
         val firstSweep = s.frames.indexOfFirst { it.anim == Anim.SWEEP }
         assertTrue(lastClimb < firstSweep)
@@ -344,5 +344,54 @@ class SimulatorTest {
         assertEquals(1f, s.frames.last().houseT, 0.001f)
         assertEquals(0f, s.frames.last().doorOpen, 0.01f)
         assertTrue(s.frames.filter { it.anim == Anim.CLIMB }.size > 60)
+    }
+
+    // ------------------------------------------------------------------ Meldung des Nutzers: Fegen, Erschrecken, Treppe, Fegen
+    private fun userPlan(objs: List<SceneObject>) = base(
+        ViewMode.SIDE,
+        listOf(Step(ActionType.SWEEP, seconds = 3f), Step(ActionType.SCARE), Step(ActionType.STAIRS, seconds = 2f), Step(ActionType.SWEEP, seconds = 3f)),
+        objs,
+    )
+
+    @Test
+    fun stairsStepWithOnlyALadderUsesTheLadderInsteadOfDoingNothing() {
+        val sim = Simulator(userPlan(listOf(house(), ladder()))).run()
+        assertTrue("Hinweis auf Ersatz", sim.warnings.any { it.contains("Treppe") && it.contains("Leiter") })
+        assertTrue("Wichtel steigt", sim.frames.any { it.step == 2 && it.anim == Anim.STAIRS })
+        // Zweites Fegen oben: auf der Leiter/Treppe, ohne vorher aus der Tür zu kommen
+        val top = sim.frames.filter { it.step == 3 && it.anim == Anim.SWEEP }
+        assertTrue("fegt", top.size > 30)
+        assertTrue("fegt oben", top.all { it.ignore >= 0 })
+    }
+
+    @Test
+    fun sweepAndScareOnTopStayThereUntilTheNextWalk() {
+        val sim = Simulator(userPlan(listOf(house(), stairs()))).run()
+        assertTrue(sim.warnings.none { it.contains("Keine") })
+        val top = sim.frames.filter { it.step == 3 }
+        val first = top.first()
+        assertTrue("Fegen beginnt oben", first.ignore >= 0)
+        assertTrue("danach geht er hinunter und heim", sim.frames.last().houseT > 0.99f)
+    }
+
+    @Test
+    fun doorStaysClosedForAMomentBetweenLeavingAndComingBack() {
+        val sim = Simulator(userPlan(listOf(house(), stairs()))).run()
+        var opens = 0
+        var closedSince = -1f
+        var minGap = 99f
+        var wasOpen = false
+        for (f in sim.frames) {
+            if (f.doorOpen < 0.02f) {
+                if (closedSince < 0f) closedSince = f.t
+                if (wasOpen) wasOpen = false
+            } else {
+                if (closedSince >= 0f && opens > 0) minGap = minOf(minGap, f.t - closedSince)
+                closedSince = -1f
+                if (!wasOpen && f.doorOpen > 0.5f) { opens++; wasOpen = true }
+            }
+        }
+        assertEquals("Türdurchgänge: heraus, hinein, heraus, hinein", 4, opens)
+        assertTrue("Tür bleibt zwischen zwei Durchgängen mindestens 0,4 s zu (war $minGap)", minGap >= 0.4f)
     }
 }

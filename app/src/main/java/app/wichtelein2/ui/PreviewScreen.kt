@@ -35,7 +35,13 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.content.Intent
+import android.os.Build
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
 import app.wichtelein2.audio.AudioPlayer
+import app.wichtelein2.core.DebugReport
+import java.io.File
 import app.wichtelein2.core.MusicChoice
 import app.wichtelein2.core.Mixdown
 import app.wichtelein2.core.Plan
@@ -58,6 +64,7 @@ fun PreviewScreen(
     settings: AppSettings,
     onClose: () -> Unit,
 ) {
+    val ctx = LocalContext.current
     val renderer = remember(plan, photo, customInterior) { Renderer(plan, photo, sprites, customInterior) }
     var t by remember { mutableFloatStateOf(0f) }
     var playing by remember { mutableStateOf(true) }
@@ -130,8 +137,29 @@ fun PreviewScreen(
                 ) { Text(if (playing) "❚❚ Pause" else "▶ Abspielen") }
                 OutlinedButton(onClick = { muted = !muted }, modifier = Modifier.testTag("preview_mute")) { Text(if (muted) "🔇 Ton aus" else "🔊 Ton an") }
                 OutlinedButton(onClick = { t = 0f; playing = true; restartCount++ }, modifier = Modifier.testTag("preview_restart")) { Text("Von vorn") }
+                OutlinedButton(
+                    onClick = { shareDebugReport(ctx, plan, sim) },
+                    modifier = Modifier.testTag("preview_debug"),
+                ) { Text("🐞 Debug-Bericht") }
                 OutlinedButton(onClick = onClose, modifier = Modifier.testTag("preview_close")) { Text("Schließen") }
             }
         }
     }
+}
+
+/** Schreibt den Debug-Bericht in eine Textdatei und öffnet das Teilen-Menü (Mail, Messenger, Dateien ...). */
+internal fun shareDebugReport(ctx: android.content.Context, plan: Plan, sim: Simulation) {
+    val version = try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "?" } catch (e: Exception) { "?" }
+    val device = "${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
+    val dir = File(ctx.cacheDir, "debug").apply { mkdirs() }
+    val file = File(dir, "wichtelein2-debug.txt")
+    file.writeText(DebugReport.build(version, device, plan, sim), Charsets.UTF_8)
+    val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        putExtra(Intent.EXTRA_SUBJECT, "Wichtelein2 Debug-Bericht")
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    ctx.startActivity(Intent.createChooser(send, "Debug-Bericht senden").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }
