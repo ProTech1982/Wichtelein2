@@ -363,6 +363,23 @@ fun StepsPanel(
                     }
                 }
             }
+            if (st.action == ActionType.STAIRS) {
+                val so = EditOps.climbObject(plan, st)
+                if (so != null) {
+                    Text("Steigung der Treppe", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    val right = EditOps.stairsRiseRight(plan, so)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(right, {
+                            val (a, b) = EditOps.autoClimbPath(so, ActionType.STAIRS)
+                            onPlan(EditOps.updateStep(plan, i) { it.copy(at = a, to = b) })
+                        }, { Text("↗ nach rechts hoch") }, modifier = Modifier.testTag("stairs_right"))
+                        FilterChip(!right, {
+                            val (a, b) = EditOps.mirroredStairsPath(so)
+                            onPlan(EditOps.updateStep(plan, i) { it.copy(at = a, to = b) })
+                        }, { Text("↖ nach links hoch") }, modifier = Modifier.testTag("stairs_left"))
+                    }
+                }
+            }
             Text("Pfad (unten → oben; sonst automatisch am Gegenstand)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedButton(onClick = { onSel(Sel.StepAt(i)) }, modifier = Modifier.testTag("step_path_bottom")) { Text("Unten verschieben") }

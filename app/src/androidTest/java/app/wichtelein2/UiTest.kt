@@ -143,7 +143,7 @@ class UiTest {
         rule.onNodeWithTag("btn_take_photo").assertIsDisplayed()
         rule.onNodeWithTag("btn_continue").assertIsDisplayed()
         rule.onNodeWithTag("btn_settings").assertIsDisplayed()
-        rule.onNodeWithText("Version 0.3.3").assertIsDisplayed()
+        rule.onNodeWithText("Version 0.3.4").assertIsDisplayed()
         rule.onNodeWithTag("btn_backgrounds").assertIsDisplayed()
         rule.onNodeWithTag("btn_home_music").assertIsDisplayed()
         rule.onNodeWithTag("btn_ar").assertIsDisplayed()
@@ -492,6 +492,11 @@ class UiTest {
         // Wieder automatisch
         tap("step_auto_path")
         awaitPlan("Pfad automatisch") { it.steps[2].to == null && it.steps[2].at == null }
+        // Steigung der Treppe: nach links hoch, dann wieder nach rechts
+        tap("stairs_left")
+        p = awaitPlan("Treppe steigt nach links") { it.steps[2].at != null && it.steps[2].to!!.x < it.steps[2].at!!.x }
+        tap("stairs_right")
+        awaitPlan("Treppe steigt nach rechts") { it.steps[2].to != null && it.steps[2].to!!.x > it.steps[2].at!!.x }
         shot("ui_editor_treppe")
     }
 

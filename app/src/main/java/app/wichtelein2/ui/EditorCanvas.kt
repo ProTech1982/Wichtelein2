@@ -3,6 +3,7 @@ package app.wichtelein2.ui
 import android.graphics.Bitmap
 import android.graphics.DashPathEffect
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -214,6 +215,31 @@ private fun drawOverlays(nc: android.graphics.Canvas, plan: Plan, sel: Sel, k: F
         } else {
             nc.drawRect(r, fill)
             nc.drawRect(r, line)
+        }
+        // Leiter: Holme und Sprossen; Treppe: Stufen, die in Steigrichtung ansteigen (Pfeil nach oben)
+        if (o.type == ObjType.LADDER) {
+            line.strokeWidth = 2f * density * px
+            val rx = o.w * 0.28f
+            nc.drawLine(-rx, -o.h / 2f, -rx, o.h / 2f, line)
+            nc.drawLine(rx, -o.h / 2f, rx, o.h / 2f, line)
+            val rungs = 8
+            for (k in 1 until rungs) {
+                val yy = -o.h / 2f + o.h * k / rungs
+                nc.drawLine(-rx, yy, rx, yy, line)
+            }
+        } else if (o.type == ObjType.STAIRS) {
+            line.strokeWidth = 2.5f * density * px
+            val right = EditOps.stairsRiseRight(plan, o)
+            val n = 5
+            val path = Path()
+            fun sx(i: Int) = (if (right) -o.w / 2f + o.w * i / n else o.w / 2f - o.w * i / n)
+            path.moveTo(sx(0), o.h / 2f)
+            for (k in 0 until n) {
+                val top = o.h / 2f - o.h * (k + 1) / n
+                path.lineTo(sx(k), top)
+                path.lineTo(sx(k + 1), top)
+            }
+            nc.drawPath(path, line)
         }
         // Standfläche, die der Wichtel nicht betreten darf
         val f = o.footprintLocal(plan.view)

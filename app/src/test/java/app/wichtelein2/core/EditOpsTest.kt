@@ -188,4 +188,15 @@ class EditOpsTest {
         assertEquals(Pt(300f, 300f), q.steps[1].at)
         assertEquals(Pt(500f, 500f), q.steps[2].at)
     }
+
+    @Test
+    fun stairsCanRiseLeftOrRight() {
+        val o = SceneObject(1, ObjType.STAIRS, 500f, 700f, 300f, 200f)
+        val p = Plan.default(1600, 1000).copy(objects = listOf(o), steps = listOf(Step(ActionType.STAIRS)))
+        assertTrue("automatisch nach rechts", EditOps.stairsRiseRight(p, o))
+        val (a, b) = EditOps.mirroredStairsPath(o)
+        assertTrue(b.x < a.x && b.y < a.y)
+        val q = p.copy(steps = listOf(Step(ActionType.STAIRS, at = a, to = b)))
+        assertTrue("nach links", !EditOps.stairsRiseRight(q, o))
+    }
 }

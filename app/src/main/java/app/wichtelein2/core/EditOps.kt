@@ -93,6 +93,20 @@ object EditOps {
             Pair(o.toWorld(Pt(-o.w * 0.40f, o.h * 0.46f)), o.toWorld(Pt(o.w * 0.40f, -o.h * 0.30f)))
         }
 
+    /** Treppe nach links hoch: von unten rechts nach oben links (Spiegelbild des automatischen Pfads). */
+    fun mirroredStairsPath(o: SceneObject): Pair<Pt, Pt> =
+        Pair(o.toWorld(Pt(o.w * 0.40f, o.h * 0.46f)), o.toWorld(Pt(-o.w * 0.40f, -o.h * 0.30f)))
+
+    /** Steigt die Treppe dieses Gegenstands nach rechts an? Nach dem Pfad des ersten Treppen-Schritts, sonst ja. */
+    fun stairsRiseRight(p: Plan, o: SceneObject): Boolean {
+        for (st in p.steps) {
+            if (st.action != ActionType.STAIRS || climbObject(p, st)?.id != o.id) continue
+            val path = climbPath(p, st) ?: continue
+            return path.second.x >= path.first.x
+        }
+        return true
+    }
+
     /** Die im Foto gezeigten Punkte eines Schritts: (Ort bzw. Pfad unten, Pfad oben); bei Leiter/Treppe auch der automatische Pfad. */
     fun stepPoints(p: Plan, st: Step): Pair<Pt?, Pt?> {
         if (st.action.isClimb) {

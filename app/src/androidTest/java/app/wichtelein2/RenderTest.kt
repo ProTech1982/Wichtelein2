@@ -246,4 +246,23 @@ class RenderTest {
         assertTrue("Wichtel im Türrahmen sichtbar, geänderte Pixel: $changed", changed > 800)
         TestUtil.shot("render_haus_um_tuer", img)
     }
+
+    @Test
+    fun wichtelOnLadderIsNotHiddenByTheHouseBehindIt() {
+        val sp = SpriteLibrary(ctx)
+        val photo = TestUtil.photo()
+        val plan0 = Plan.default(photo.width, photo.height)
+        val house = SceneObject(1, ObjType.HOUSE, 400f, 330f, 400f, 400f)
+        val plan = plan0.copy(objects = listOf(house), nextId = 2)
+        val x = 400f
+        val y = 400f
+        assertTrue("Fuß liegt hinter der Hausunterkante", y < house.baseY)
+        val base = render(plan, photo, sp, null)
+        val onLadder = render(plan, photo, sp, frame(x, y, Anim.CLIMB, 2, 4).copy(ignore = 5))
+        val behind = render(plan, photo, sp, frame(x, y, Anim.WALK, 2, 4))
+        val h = Scaler(plan).heightAt(y)
+        fun changed(img: Bitmap) = TestUtil.diffPixels(base, img, (x - h / 2).toInt(), (y - h).toInt(), (x + h / 2).toInt(), y.toInt())
+        assertTrue("auf der Leiter sichtbar: ${changed(onLadder)}", changed(onLadder) > 800)
+        assertTrue("ohne Leiter hinter dem Haus verdeckt: ${changed(behind)}", changed(behind) < changed(onLadder))
+    }
 }
