@@ -44,6 +44,7 @@ private fun typeColor(t: ObjType): Int = when (t) {
     ObjType.TREE -> 0xFF2E7D32.toInt()
     ObjType.HOUSE -> 0xFFE64A19.toInt()
     ObjType.LADDER -> 0xFFF9A825.toInt()
+    ObjType.STAIRS -> 0xFFFFB300.toInt()
     ObjType.GRASS -> 0xFF7CB342.toInt()
     ObjType.BUSH -> 0xFF00897B.toInt()
     ObjType.STONE -> 0xFF607D8B.toInt()
