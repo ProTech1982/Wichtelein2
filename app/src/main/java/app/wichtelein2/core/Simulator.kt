@@ -277,10 +277,10 @@ class Simulator(private val plan: Plan, private val fps: Int = 30) {
             turnToward(toDoor, 600f * dt)
             emit(Anim.IDLE, 0, 0f)
         }
-        val n = max(1, Math.round(1.2f * fps))
+        val n = max(1, Math.round(1.6f * fps))
         for (i in 1..n) {
             val u = i.toFloat() / n
-            val moved = smooth(min(1f, u * 2f))                      // erst zur Türöffnung gehen, dann dort verschwinden
+            val moved = smooth(min(1f, u * 2f))                      // erst zur Türöffnung gehen, dann tiefer in den Raum
             val before = pos
             pos = Pt(out.x + (d.x - out.x) * moved, out.y + (d.y - out.y) * moved)
             turnToward(toDoor, 900f * dt)
@@ -289,7 +289,8 @@ class Simulator(private val plan: Plan, private val fps: Int = 30) {
             emit(anim, floor((phase - floor(phase)) * anim.frames).toInt(), smooth(u))
         }
         pos = d
-        setDoor(t + 0.05f, 0f)
+        hold(0.6f, Anim.IDLE, 1f)    // Tür bleibt offen, bis er ganz im Raum verschwunden ist
+        setDoor(t, 0f)
         hold(0.9f, Anim.IDLE, 1f)
         inside = true
     }

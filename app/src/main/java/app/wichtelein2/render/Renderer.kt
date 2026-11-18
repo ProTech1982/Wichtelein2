@@ -134,11 +134,11 @@ class Renderer(
      */
     fun drawWichtelPx(canvas: Canvas, view: ViewMode, x: Float, y: Float, hpx: Float, dir: Int, anim: Anim, frame: Int, houseT: Float) {
         val meta = sprites.meta
-        val alpha = 1f - smooth((houseT - 0.55f) / 0.45f)
+        val alpha = 1f - smooth((houseT - 0.78f) / 0.22f)   // erst ganz hinten im Raum ausblenden
         if (alpha <= 0.01f) return
-        val k = 1f - 0.30f * houseT
+        val k = 1f - 0.40f * houseT
         val s = hpx * k / meta.heightPx
-        val yOff = -0.10f * hpx * houseT
+        val yOff = -0.30f * hpx * houseT   // geht in den Raum hinein (nach hinten, im Bild nach oben)
         val sheet = sprites.sheet(view, anim)
         val c = meta.cell
         val src = Rect(frame * c, dir * c, (frame + 1) * c, (dir + 1) * c)
